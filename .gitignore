@@ -99,3 +99,10 @@ ENV/
 
 # mypy
 .mypy_cache/
+
+*.mp3
+*.jpg
+*.m3u
+
+.idea
+*.iml
