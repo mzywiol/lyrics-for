@@ -1,0 +1,60 @@
+Ideas on how to find where song lyrics start:
+
+* Go blob by blob,
+** check first line in blob if it contains song title
+*** maybe with some number at the beginning. if this number equals tracknumber, that's it!
+*** maybe with time signature at the end. if it's there, that's it!
+** if it's first song on the album and we find it i tracklist?
+*** figure out the song title line format (e.g. ##. TITLE) and check if next line has the same format
+*** or if next line contains the title of the next song
+
+Ideas on how to find where song lyrics end:
+* Once the lyrics header (i.e. song title) is found, go back and check the format of song separator: what are the parts
+up to previous TEXT blob? look for a similar sequence of parts below
+** what if the song separator is just one empty line?
+** check the next line after song sparator if it conforms to the song header format and contains next song title.
+
+
+one way or another, the next song title is needed.
+
+
+ASSUMPTIONS:
+* songs are in the same order in txt files as on albums and in files
+* files have numbers in filenames
+* numbers in filenames occur before song title
+* separators are only between songs, maybe underline the title, but not within -> is this true?
+
+NOT GUARANTED:
+* song numbers in file don't have to be digits only
+* song tracknumbers can gave gaps
+* song numbers in filenames don't have to be the same as in lyrics files and tracknumber tags
+* not all songs are separated by separator, even within one album (see Pendragon - Not of This World)
+* not all songs have lyrics in files (some are missing, some are instrumental)
+* not all songs have total tracks tag
+* not all multidisc album songs have disc number and total disc number
+
+
+====
+
+what else do I want
+
+* get lyrics from tags (both unsynchronized and synchronized)
+* get lyrics from web:
+** darklyrics.com
+*** url template: http://www.darklyrics.com/lyrics/dreamtheater/imagesandwords.html (whole album at once)
+** lyrics.wikia.com
+*** url: http://lyrics.wikia.com/wiki/Porcupine_Tree:Piano_Lessons
+** www.lyrics.com
+** www.azlyrics.com
+*** url template: https://www.azlyrics.com/lyrics/[artist.stripwhitespace().lower()]/[title.stipwhitespaces().lower()].html
+** www.lyricsondemand.com
+*** url: http://www.lyricsondemand.com/r/radioheadlyrics/creeplyrics.html
+* get lyrics from html file?
+* get lyrics from doc/docx?
+
+* save lyrics to:
+** txt file
+*** define if tracklist should be there
+*** define separator
+*** define if song length should be there
+** tags
