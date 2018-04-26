@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-'''
+"""
 approach: analyze file, look for structure: separators, song lyric headlines format, look for promising lines and
 
 record separators (their format, symbols used)
@@ -33,10 +33,11 @@ if neither:
         otherwise, evaluate by similarity
         the first most similar will be where LYRIC BEGIN
     consume lines until first GAP longer than previous GAPS. -> this is where LYRIC ENDS
-'''
+"""
 
 import sys
-from pathlib import Path
+import re
+from enum import Enum
 
 
 def err(msg):
@@ -49,23 +50,62 @@ def log(msg):
 
 # Find lyrics in file
 
-def find_lyrics_in_file(lyricsfile, songtitle):
-    pass
+def read_lines_from_file(filename):
+    import chardet
+    with open(filename, 'rb') as bytefile:
+        encoding = chardet.detect(bytefile.read())['encoding']
+    with open(filename, "r", encoding=encoding) as f:
+        try:
+            filelines = f.readlines()
+        except UnicodeDecodeError:
+            with open(filename, "r", encoding='ansi') as ansif:
+                filelines = ansif.readline()
+    return filelines
 
 
-# Parsing arguments
+class LyricsFile:
+    parts = []  # sequence of file parts: blobs, blank spaces and separators
+    separators = []
 
-lyricsfilename = sys.argv[1] if len(sys.argv) > 1 else None
-songtitle = sys.argv[2].strip() if len(sys.argv) > 2 else None
 
-if lyricsfilename and songtitle:
-    lyricsfile = Path(lyricsfilename)
-    if not lyricsfile.is_file():
-        err("File doesn't exist: %s" % lyricsfile)
-        exit(1)
-    if len(songtitle) == 0:
-        err("Song title empty")
-        exit(1)
-    lyricsfile = lyricsfile.resolve()
+regex_separator = r"^(\W\W?)\1*\W?$"
+
+
+class LineType(Enum):
+    BLANK = 1
+    SEPARATOR = 2
+    TEXT = 3
+
+    @staticmethod
+    def of(line):
+        if len(line) == 0:
+            return LineType.BLANK
+        if re.match(regex_separator, line):
+            return LineType.SEPARATOR
+        return LineType.TEXT
+
+
+class FileData:
+    def __init__(self):
+        self.lines = []
+        self.separators = {}  # line number => separator type (i.e. specific symbols used)
+
+
+class Line:
+    def __init__(self, line):
+        self.line = line.strip()
+        self.type = LineType.of(self.line)
+
+
+def find_lyrics_in_file(lyrics_file, songtitle):
+    file_lines = read_lines_from_file(lyrics_file)
+    if len(file_lines) == 0:
+        err("> File %s is empty." % lyrics_file)
+        return None
+
+    return None
+
+
+
 
 

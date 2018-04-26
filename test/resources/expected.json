@@ -1,0 +1,32 @@
+[
+  {
+    "file": "abneypark.txt",
+    "songs": [
+      {
+        "title": "Under the Radar",
+        "firstLine": "Nobody saw our sails on the horizon",
+        "lastLine": "Here we come, fife and drum, under the radar we crept on!"
+      },
+      {
+        "title": "Until The Day You Die",
+        "firstLine": "I've chased this dream since I was five",
+        "lastLine": "Until the day I die"
+      },
+      {
+        "title": "Too Far To Turn Back",
+        "firstLine": "We've come too far to turn back",
+        "lastLine": "Turn back turn back turn back turn back..."
+      }
+    ]
+  },
+  {
+    "file": "efrafa.txt",
+    "songs": [
+      {
+        "title": "Fu Inle",
+        "firstLine": "My brother be,",
+        "lastLine": "ring the change of days now done."
+      }
+    ]
+  }
+]
