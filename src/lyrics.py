@@ -69,32 +69,57 @@ class LyricsFile:
 
 
 regex_separator = r"^(\W\W?)\1*\W?$"
+regex_numbered_line = r"^(?:#?)(\d+)(\W+)\w*"
+regex_tracklength = r"\d{1,2}[:]\d\d\s*$"
 
 
-class LineType(Enum):
+class LineType:
     BLANK = 1
     SEPARATOR = 2
     TEXT = 3
 
     @staticmethod
     def of(line):
+        line = line.strip()
         if len(line) == 0:
-            return LineType.BLANK
-        if re.match(regex_separator, line):
-            return LineType.SEPARATOR
-        return LineType.TEXT
+            return BlankLine()
+        hl_match = re.match(regex_separator, line)
+        if hl_match:
+            return HorizontalLine(hl_match)
+        return TextLine(line)
 
 
-class FileData:
-    def __init__(self):
-        self.lines = []
-        self.separators = {}  # line number => separator type (i.e. specific symbols used)
+class BlankLine(LineType):
+    pass
 
 
-class Line:
+class HorizontalLine(LineType):
+    def __init__(self, hl_match):
+        self.root = hl_match.group(1)
+        self.underline = False
+
+
+class TextLine(LineType):
     def __init__(self, line):
-        self.line = line.strip()
-        self.type = LineType.of(self.line)
+        self.line = line
+        number_match = re.match(regex_numbered_line, self.line)
+        (self.number, self.number_separator) = \
+            (int(number_match.group(1)), number_match.group(2)) if number_match \
+            else (None, None)
+
+
+class LyricsFileAnalysis:
+    def __init__(self, lines):
+        self.lines = [LineType.of(line) for line in lines]
+        self.separators = {ln: self.lines[ln].root for ln in range(0, len(self.lines))
+                           if isinstance(self.lines[ln], HorizontalLine)}
+        for sep in self.separators:
+            if sep == 0:
+                continue
+            if isinstance(self.lines[sep - 1], TextLine):  # previous line is text
+                if sep == 1:
+                    self.lines[sep].underline = True  # and it's the first line in file
+        self.numbered_line_sequences = []
 
 
 def find_lyrics_in_file(lyrics_file, songtitle):
