@@ -68,7 +68,6 @@ def strip_the(name):
 
 
 def justletters(line):
-    import unidecode
     return re.sub("\\W", "", unidecode.unidecode(line.lower()))
 
 
@@ -126,7 +125,8 @@ class Song:
 
     def apply_lyrics_from_file(self, lyrics_for_songs):
         if self.index < len(lyrics_for_songs):
-            lyrics_head = lyrics_for_songs[self.index]['part']
+            lyrics_head = lyrics_for_songs[self.index]['part']  # todo: this fails when lyrics for a song are not in the file at all.
+            #  todo: but this needs to be fixed anyway, as finding the end of lyrics is just wrong: see Pink Floyd - The Wall 1.13 Goodbye Cruel World
             next_song_lyrics = lyrics_for_songs[self.index + 1]['part'] if self.index+1 < len(lyrics_for_songs) else None
             self._lyrics_parts = []
             while lyrics_head != next_song_lyrics:
@@ -186,7 +186,11 @@ def read_lines(filename):
     with open(filename, 'rb') as bytefile:
         encoding = chardet.detect(bytefile.read())['encoding']
     with open(filename, "r", encoding=encoding) as f:
-        filelines = f.readlines()
+        try:
+            filelines = f.readlines()
+        except UnicodeDecodeError:
+            with open(filename, "r", encoding='ansi') as ansif:
+                filelines = ansif.readline()
     return filelines
 
 
