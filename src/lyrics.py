@@ -37,7 +37,6 @@ if neither:
 
 import sys
 import re
-from enum import Enum
 
 
 def err(msg):
@@ -74,9 +73,6 @@ regex_tracklength = r"\d{1,2}[:]\d\d\s*$"
 
 
 class LineType:
-    BLANK = 1
-    SEPARATOR = 2
-    TEXT = 3
 
     @staticmethod
     def of(line):
@@ -85,18 +81,30 @@ class LineType:
             return BlankLine()
         hl_match = re.match(regex_separator, line)
         if hl_match:
-            return HorizontalLine(hl_match)
+            return HorizontalLine()
         return TextLine(line)
+
+    def is_numbered(self):
+        return False
+
+    def is_underline(self):
+        return False
 
 
 class BlankLine(LineType):
-    pass
+    def __repr__(self):
+        return ""
 
 
 class HorizontalLine(LineType):
-    def __init__(self, hl_match):
-        self.root = hl_match.group(1)
+    def __init__(self):
         self.underline = False
+
+    def is_underline(self):
+        return self.underline
+
+    def __repr__(self):
+        return "___" if self.is_underline() else "==="
 
 
 class TextLine(LineType):
@@ -107,19 +115,60 @@ class TextLine(LineType):
             (int(number_match.group(1)), number_match.group(2)) if number_match \
             else (None, None)
 
+    def is_numbered(self):
+        return self.number is not None
+
+    def __repr__(self):
+        return f"${self.line[:7]}..."
+
+
+def monotonic(ints):
+    for idx in range(1, len(ints)):
+        if ints[idx] < ints[idx - 1]:
+            return False
+    return True
+
+
+def windows(seq, siz=2):
+    return [seq[ln:ln + siz] for ln in range(0, len(seq) - siz + 1)]
+
 
 class LyricsFileAnalysis:
+    class FilePart:
+        def __init__(self, file, first_line, line_no):
+            self.file = file
+            self.type = type(first_line)
+            self.range_starts = line_no
+            self.range_ends = line_no
+            self.tracklist = False
+
+        def lines(self):
+            return self.file.lines[slice(self.range_starts, self.range_ends + 1)]
+
+        def __len__(self):
+            return self.range_ends - self.range_starts + 1
+
+        def merge(self, line):
+            if self.type == HorizontalLine:
+                return False
+
+            if type(line) is self.type:
+                self.range_ends += 1
+                if line.is_numbered() and monotonic([l.number for l in self.lines() if l.is_numbered()]):
+                    self.tracklist = True
+                return True
+            return False
+
     def __init__(self, lines):
-        self.lines = [LineType.of(line) for line in lines]
-        self.separators = {ln: self.lines[ln].root for ln in range(0, len(self.lines))
-                           if isinstance(self.lines[ln], HorizontalLine)}
-        for sep in self.separators:
-            if sep == 0:
-                continue
-            if isinstance(self.lines[sep - 1], TextLine):  # previous line is text
-                if sep == 1:
-                    self.lines[sep].underline = True  # and it's the first line in file
-        self.numbered_line_sequences = []
+        self.lines = [BlankLine()] + [LineType.of(line) for line in lines]
+        for win in windows(self.lines, 3):
+            if [type(l) for l in win[1:]] == [TextLine, HorizontalLine] and type(win[0]) in [BlankLine, HorizontalLine]:
+                win[2].underline = True
+
+        self.parts = [self.FilePart(self, self.lines[0], 0)]
+        for ln, line in enumerate(self.lines[1:]):
+            if not self.parts[-1].merge(line):
+                self.parts.append(self.FilePart(self, line, ln))
 
 
 def find_lyrics_in_file(lyrics_file, songtitle):

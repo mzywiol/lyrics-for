@@ -345,7 +345,7 @@ class TitleIndicator:
         factors = {}
         if part.len() == 1:
             factors[self.ContextFactors.SINGLE_LINE] = True
-        if part.underline:
+        if part.is_underline:
             factors[self.ContextFactors.UNDERLINE] = True
         if part.prev is None or part.prev.label == Part.Label.SEPARATOR:
             factors[self.ContextFactors.PRECEDED_BY_SEPARATOR] = True

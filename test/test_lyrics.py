@@ -11,6 +11,31 @@ HL = lyrics.HorizontalLine
 TEXT = lyrics.TextLine
 
 
+class CompareEasily:
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+
+class UtilTest(unittest.TestCase):
+    def test_monotonic(self):
+        self.assertTrue(lyrics.monotonic([]))
+        self.assertTrue(lyrics.monotonic([1]))
+        self.assertTrue(lyrics.monotonic([1, 2]))
+        self.assertTrue(lyrics.monotonic([1, 2, 3]))
+        self.assertTrue(lyrics.monotonic([1, 1, 3]))
+        self.assertTrue(lyrics.monotonic([1, 3, 100]))
+        self.assertTrue(lyrics.monotonic([1, 3, 100, 100, 101]))
+        self.assertFalse(lyrics.monotonic([2, 1]))
+        self.assertFalse(lyrics.monotonic([2, 2, 1]))
+        self.assertFalse(lyrics.monotonic([2, 3, 4, 5, 4]))
+
+
 class LinesTest(unittest.TestCase):
     def test_blank(self):
         self.assertIsInstance(lyrics.LineType.of(""), BLANK)
@@ -69,42 +94,63 @@ class LyricsFileAnalysis(unittest.TestCase):
     def test_init(self):
         lines = """First
         
+        
         1. One
         02>>Two
         ===
         
-        Three
-        -=-=-"""
-        expected_types = [TEXT, BLANK, TEXT, TEXT, HL, BLANK, TEXT, HL]
+        3. Three
+        -=-=-
+        
+        4. Four
+        -=-="""
         analysis = lyrics.LyricsFileAnalysis(lines.split("\n"))
-        self.assertEqual([type(l) for l in analysis.lines], expected_types)
-        self.assertEqual(analysis.separators, {4: "==", 7: "-="})
+        self.assertEqual(len([t for t in analysis.parts if t.tracklist]), 1)
 
-    def test_underline(self):
-        lines = """First line
-        
-        
-        Single line before underline
-        ======
-        
-        Blob line 1
-        Blob line 2
-        
-        ---
-        
-        Single line after separator
-        
-        Blob line 1
-        Blob line 2
-        
-        ---
-        Single line between separators - below is underline
-        ======
-        
-        Single line at the end"""
-        analysis = lyrics.LyricsFileAnalysis(lines.split("\n"))
-        self.assertEqual([analysis.lines[sep].root for sep in analysis.separators if analysis.lines[sep].underline],
-                         ["==", "=="])
+    def test_files(self):
+        class FileData(CompareEasily):
+            def __init__(self, tracklist_lengths, underlines):
+                self.tracklist_lengths = tracklist_lengths
+                self.underlines = underlines
+
+        expected = {"abneypark.txt": FileData([], 0),
+                    "efrafa.txt": FileData([9], 0),
+                    "pinkfloyd.txt": FileData([13, 13], 27),
+                    "mesh.txt": FileData([12], 10)}
+
+        for filename in expected:
+            with self.subTest(filename=filename):
+                analysis = lyrics.LyricsFileAnalysis(lyrics.read_lines_from_file(test_resources_dir / filename))
+                actual = FileData([len(tl) for tl in analysis.parts if tl.tracklist],
+                                  len([und for und in analysis.lines if und.is_underline()]))
+                self.assertEqual(actual, expected[filename])
+
+
+    # def test_underline(self):
+    #     lines = """First line
+    #
+    #
+    #     Single line before underline
+    #     ======
+    #
+    #     Blob line 1
+    #     Blob line 2
+    #
+    #     ---
+    #
+    #     Single line after separator
+    #
+    #     Blob line 1
+    #     Blob line 2
+    #
+    #     ---
+    #     Single line between separators - below is underline
+    #     ======
+    #
+    #     Single line at the end"""
+    #     analysis = lyrics.LyricsFileAnalysis(lines.split("\n"))
+    #     self.assertEqual([analysis.lines[sep].root for sep in analysis.separators if analysis.lines[sep].underline],
+    #                      ["==", "=="])
 
 
 # class LyricsTest(unittest.TestCase):
