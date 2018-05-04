@@ -4,10 +4,11 @@ from pathlib import Path
 from src import lyrics
 
 test_resources_dir = Path("resources")
-test_data_filename = "expected_short.json"
+test_data_filename = "expected.json"
 
 BLANK = lyrics.BlankLine
 HL = lyrics.HorizontalLine
+UND = lyrics.UnderLine
 TEXT = lyrics.TextLine
 
 
@@ -41,24 +42,6 @@ class LinesTest(unittest.TestCase):
         self.assertIsInstance(lyrics.LineType.of(""), BLANK)
         self.assertIsInstance(lyrics.LineType.of("   "), BLANK)
         self.assertIsInstance(lyrics.LineType.of("\t"), BLANK)
-
-    def test_horizontal_line(self):
-        def assert_hl(from_string, expected_root):
-            hl = lyrics.LineType.of(from_string)
-            self.assertIsInstance(hl, HL)
-            self.assertEqual(hl.root, expected_root)
-        assert_hl("--", "--")
-        assert_hl("---", "--")
-        assert_hl("------------------", "--")
-        assert_hl("===", "==")
-        assert_hl("=======================", "==")
-        assert_hl("*****************************", "**")
-        assert_hl("^^^^^^^^^^", "^^")
-        assert_hl("~~~~~~", "~~")
-        assert_hl("-=-=-", "-=")
-        assert_hl("-=-=", "-=")
-        assert_hl("*&*&*&*&*&*&*&*&*&*&*&*&*", "*&")
-        assert_hl("*&*&*&*&*&*&*&*&*&*&*&*&", "*&")
 
     def test_text_line(self):
         def assert_unnumbered(from_string):
@@ -105,67 +88,87 @@ class LyricsFileAnalysis(unittest.TestCase):
         4. Four
         -=-="""
         analysis = lyrics.LyricsFileAnalysis(lines.split("\n"))
-        self.assertEqual(len([t for t in analysis.parts if t.tracklist]), 1)
+        self.assertEqual(len([t for t in analysis.parts if t.is_tracklist]), 1)
 
     def test_files(self):
         class FileData(CompareEasily):
-            def __init__(self, tracklist_lengths, underlines):
+            def __init__(self, tracklist_lengths, underlines, has_separators, lines_with_scores={}, parts_with_scores={}):
                 self.tracklist_lengths = tracklist_lengths
                 self.underlines = underlines
+                self.has_separators = has_separators
+                self.lines_with_scores = lines_with_scores
+                self.parts_with_scores = parts_with_scores
 
-        expected = {"abneypark.txt": FileData([], 0),
-                    "efrafa.txt": FileData([9], 0),
-                    "pinkfloyd.txt": FileData([13, 13], 27),
-                    "mesh.txt": FileData([12], 10)}
+        expecteds = {"abneypark.txt": FileData([], 0, True, {"Under the Radar": 0},
+                                               {"Under The Radar": 0,
+                                                "Under the Radar": 2}),
+                     "efrafa.txt": FileData([9], 0, False, {"1. Simulacrum": 1},
+                                            {"1. Simulacrum": 2,
+                                             "FALL OF EFRAFA LYRICS": 0,
+                                             "These throws of rapture": 1}),
+                     "pinkfloyd.txt": FileData([13, 13], 27, True, {"2. The Thin Ice 2:30": 2, "THE THIN ICE": 2},
+                                               {"1. In the Flesh? 3:19": 0,
+                                                "IN THE FLESH ?": 3}),
+                     "mesh.txt": FileData([12], 10, True, {"04 - Retaliation.mp3": 1, "4. Retaliation": 2},
+                                          {"01 - Firefly.mp3": 0,
+                                           "4. Retaliation": 4})}
 
-        for filename in expected:
+        for filename in expecteds:
             with self.subTest(filename=filename):
+                expected = expecteds[filename]
                 analysis = lyrics.LyricsFileAnalysis(lyrics.read_lines_from_file(test_resources_dir / filename))
-                actual = FileData([len(tl) for tl in analysis.parts if tl.tracklist],
-                                  len([und for und in analysis.lines if und.is_underline()]))
-                self.assertEqual(actual, expected[filename])
+                actual = FileData([len(tl.lines) for tl in analysis.parts if tl.is_tracklist],
+                                  len([und for und in analysis.lines if type(und) is UND]),
+                                  analysis.has_separators,
+                                  {line: next((l for l in analysis.lines
+                                               if type(l) is TEXT and l.line == line)).title_score()
+                                   for line in expected.lines_with_scores},
+                                  {line: next((p for p in analysis.parts
+                                               if p.type is TEXT and p.lines[0].line.startswith(line))).song_begins_score
+                                   for line in expected.parts_with_scores})
+                self.assertEqual(actual, expected)
 
 
-    # def test_underline(self):
-    #     lines = """First line
-    #
-    #
-    #     Single line before underline
-    #     ======
-    #
-    #     Blob line 1
-    #     Blob line 2
-    #
-    #     ---
-    #
-    #     Single line after separator
-    #
-    #     Blob line 1
-    #     Blob line 2
-    #
-    #     ---
-    #     Single line between separators - below is underline
-    #     ======
-    #
-    #     Single line at the end"""
-    #     analysis = lyrics.LyricsFileAnalysis(lines.split("\n"))
-    #     self.assertEqual([analysis.lines[sep].root for sep in analysis.separators if analysis.lines[sep].underline],
-    #                      ["==", "=="])
+class LyricsTest(unittest.TestCase):
+    def test_lyrics_begin(self):
+        expecteds = {"abneypark.txt": {"No Such Song": None,
+                                       "Under the Radar": "Under the Radar",
+                                       "Building Steam": "Building Steam",
+                                       "Until The Day You Die": "Until The Day You Die",
+                                       "Too Far To Turn Back": "Too Far To Turn Back"},
+                     "efrafa.txt": {"Simulacrum": "1. Simulacrum",
+                                    "Fu Inle": "2. Fu Inl�",
+                                    "Republic Of Heaven": "3. Republic Of Heaven",
+                                    "The Sky Suspended": "6. The Sky Suspended",
+                                    "Warren Of Snares": "7. Warren Of Snares"},
+                     "pinkfloyd.txt": {"In The Flesh?": "IN THE FLESH ?",
+                                       "The Thin Ice": "THE THIN ICE",
+                                       "Goodbye Blue Sky": "GOODBYE BLUE SKY",
+                                       "In The Flesh": "IN THE FLESH"},
+                     "mesh.txt": {"Firefly": "1. Firefly",
+                                  "The Place You Hide": "10. The Place You Hide",
+                                  "Friends Like These": None}}
 
+        for file in expecteds:
+            for song in expecteds[file]:
+                with self.subTest(filename=file, songtitle=song):
+                    self.assertEqual(lyrics.lyrics_begin_in_file(test_resources_dir / file, song).lines[0].line,
+                                     expecteds[file][song])
 
-# class LyricsTest(unittest.TestCase):
-#     test_data_file = test_resources_dir / test_data_filename
-#     with open(test_data_file) as tf:
-#         test_data = json.load(tf)
-#
-#     def test_lyrics_files_exist(self):
-#         for single_lyrics_file in self.test_data:
-#             filename = single_lyrics_file['file']
-#             for single_song in single_lyrics_file['songs']:
-#                 song_title = single_song['title']
-#                 with self.subTest(filename=filename, song_title=song_title):
-#                     found_lyrics = lyrics.find_lyrics_in_file(test_resources_dir / filename, song_title)
-#                     self.assertEqual(found_lyrics[0], single_song['firstLine'])
-#                     self.assertEqual(found_lyrics[-1], single_song['lastLine'])
+    test_data_file = test_resources_dir / test_data_filename
+    with open(test_data_file) as tf:
+        test_data = json.load(tf)
+
+    def test_lyrics_files_exist(self):
+        for single_lyrics_file in self.test_data:
+            filename = single_lyrics_file['file']
+            for single_song in single_lyrics_file['songs']:
+                song_title = single_song['title']
+                with self.subTest(filename=filename, song_title=song_title):
+                    last_line = lyrics.lyrics_end_in_file(test_resources_dir / filename, song_title)
+                    self.assertEqual(last_line, single_song['lastLine'])
+                    # found_lyrics = lyrics.find_lyrics_in_file(test_resources_dir / filename, song_title)
+                    # self.assertEqual(found_lyrics[0], single_song['firstLine'])
+                    # self.assertEqual(found_lyrics[-1], single_song['lastLine'])
 
 

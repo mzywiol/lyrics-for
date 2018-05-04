@@ -37,6 +37,9 @@ if neither:
 
 import sys
 import re
+import difflib
+
+# Utility functions
 
 
 def err(msg):
@@ -47,7 +50,9 @@ def log(msg):
     print(f">>> ${msg}")
 
 
-# Find lyrics in file
+def truths(*bools):
+    return len([b for b in bools if b])
+
 
 def read_lines_from_file(filename):
     import chardet
@@ -62,33 +67,37 @@ def read_lines_from_file(filename):
     return filelines
 
 
-class LyricsFile:
-    parts = []  # sequence of file parts: blobs, blank spaces and separators
-    separators = []
-
-
 regex_separator = r"^(\W\W?)\1*\W?$"
 regex_numbered_line = r"^(?:#?)(\d+)(\W+)\w*"
-regex_tracklength = r"\d{1,2}[:]\d\d\s*$"
+regex_tracklength = r".*\d{1,2}[:]\d\d\s*$"
+
+# Meat
 
 
 class LineType:
+    def __init__(self, prev):
+        self.prev = prev
+        self.next = None
 
     @staticmethod
-    def of(line):
+    def of(line, prev=None):
         line = line.strip()
-        if len(line) == 0:
-            return BlankLine()
-        hl_match = re.match(regex_separator, line)
-        if hl_match:
-            return HorizontalLine()
-        return TextLine(line)
+        this = BlankLine(prev) if len(line) == 0 \
+            else TextLine(line, prev) if not re.match(regex_separator, line) \
+            else UnderLine(prev) if type(prev) is TextLine and type(prev.prev) in [type(None), BlankLine, HorizontalLine] \
+            else HorizontalLine(prev)
+        if prev is not None:
+            prev.next = this
+        return this
 
     def is_numbered(self):
         return False
 
-    def is_underline(self):
-        return False
+    def is_underlined(self):
+        return type(self.next) is UnderLine
+
+    def title_score(self):
+        return 0
 
 
 class BlankLine(LineType):
@@ -97,29 +106,39 @@ class BlankLine(LineType):
 
 
 class HorizontalLine(LineType):
-    def __init__(self):
-        self.underline = False
+    def __repr__(self):
+        return "==="
 
-    def is_underline(self):
-        return self.underline
+
+class UnderLine(LineType):
+    def __init__(self, prev):
+        super().__init__(prev)
+        if prev is not None:
+            prev.has_underline = True
 
     def __repr__(self):
-        return "___" if self.is_underline() else "==="
+        return "___"
 
 
 class TextLine(LineType):
-    def __init__(self, line):
+    def __init__(self, line, prev):
+        super().__init__(prev)
         self.line = line
         number_match = re.match(regex_numbered_line, self.line)
         (self.number, self.number_separator) = \
             (int(number_match.group(1)), number_match.group(2)) if number_match \
             else (None, None)
+        self.has_tracklength = re.match(regex_tracklength, self.line) is not None
+        self.is_all_uppercase = len(re.sub(r"[^a-z]", "", self.line)) == 0
 
     def is_numbered(self):
         return self.number is not None
 
     def __repr__(self):
-        return f"${self.line[:7]}..."
+        return f"{self.line[:7]}..."
+
+    def title_score(self):
+        return truths(self.is_numbered(), self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
 
 
 def monotonic(ints):
@@ -133,42 +152,96 @@ def windows(seq, siz=2):
     return [seq[ln:ln + siz] for ln in range(0, len(seq) - siz + 1)]
 
 
-class LyricsFileAnalysis:
-    class FilePart:
-        def __init__(self, file, first_line, line_no):
-            self.file = file
-            self.type = type(first_line)
-            self.range_starts = line_no
-            self.range_ends = line_no
-            self.tracklist = False
+class FilePart:
+    def __init__(self, file, first_line, line_no, prev_part):
+        self.file = file
+        self.type = type(first_line)
+        self.lines = [first_line]
+        self.range_starts = line_no
+        self.range_ends = line_no
+        self.is_tracklist = False
+        self.prev = prev_part
+        self.next = None
+        self.song_begins_score = 0
 
-        def lines(self):
-            return self.file.lines[slice(self.range_starts, self.range_ends + 1)]
-
-        def __len__(self):
-            return self.range_ends - self.range_starts + 1
-
-        def merge(self, line):
-            if self.type == HorizontalLine:
-                return False
-
-            if type(line) is self.type:
-                self.range_ends += 1
-                if line.is_numbered() and monotonic([l.number for l in self.lines() if l.is_numbered()]):
-                    self.tracklist = True
-                return True
+    def merge(self, line):
+        if self.type == HorizontalLine:
             return False
 
-    def __init__(self, lines):
-        self.lines = [BlankLine()] + [LineType.of(line) for line in lines]
-        for win in windows(self.lines, 3):
-            if [type(l) for l in win[1:]] == [TextLine, HorizontalLine] and type(win[0]) in [BlankLine, HorizontalLine]:
-                win[2].underline = True
+        if type(line) is self.type:
+            self.lines.append(line)
+            if line.is_numbered() and monotonic([l.number for l in self.lines if l.is_numbered()]):
+                self.is_tracklist = True
+            return True
+        return False
 
-        self.parts = [self.FilePart(self, self.lines[0], 0)]
+    def preceded_by_separator(self):
+        return self.prev is None or self.prev.type is HorizontalLine or \
+               (self.prev.type is BlankLine and self.prev.preceded_by_separator())
+
+    def count_score(self):
+        self.song_begins_score = self.lines[0].title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
+
+
+class LyricsFileAnalysis:
+
+    def __init__(self, lines):
+        self.lines = [None] * len(lines)
+        for ln in range(0, len(lines)):
+            self.lines[ln] = LineType.of(lines[ln], self.lines[ln-1])
+
+        self.parts = [FilePart(self, self.lines[0], 0, None)]
         for ln, line in enumerate(self.lines[1:]):
             if not self.parts[-1].merge(line):
-                self.parts.append(self.FilePart(self, line, ln))
+                prev = self.parts[-1]
+                self.parts.append(FilePart(self, line, ln, prev))
+                prev.next = self.parts[-1]
+
+        for part in self.parts:
+            if part.type is TextLine and not part.is_tracklist:
+                part.count_score()
+
+        self.has_separators = len([sep for sep in self.lines if type(sep) is HorizontalLine]) > 0
+
+
+def normalize(line):
+    return line.lower()
+
+
+def ratio(line, title):
+    return difflib.SequenceMatcher(None, normalize(line), title).ratio()
+
+
+def lyrics_begin_in_file(lyrics_file, song_title):
+    normalized_title = normalize(song_title)
+    analysis = LyricsFileAnalysis(read_lines_from_file(lyrics_file))
+    scores = sorted(set([p.song_begins_score for p in analysis.parts if p.song_begins_score > 0]), reverse=True)
+    similarity_threshold = 0.5
+    for s in scores:
+        parts_with_ratio = {p: ratio(p.lines[0].line, normalized_title) for p in analysis.parts
+                            if p.song_begins_score == s}
+        try:
+            return sorted([p for p in parts_with_ratio if parts_with_ratio[p] >= similarity_threshold],
+                          key=lambda part: parts_with_ratio[part], reverse=True)[0]
+        except IndexError:
+            continue
+    return None
+
+
+def lyrics_end_in_file(lyrics_file, song_title):
+    lyrics_begin = lyrics_begin_in_file(lyrics_file, song_title)
+    if lyrics_begin is None:
+        return None
+    title_score = lyrics_begin.song_begins_score
+    cur_part = lyrics_begin
+    while cur_part.next is not None:
+        next_part = cur_part.next
+        if (next_part.type is HorizontalLine) \
+                or ((next_part.type is TextLine) and (next_part.song_begins_score == title_score)):
+            cur_part = cur_part if cur_part.type is TextLine else cur_part.prev
+            break
+        cur_part = cur_part.next
+    return cur_part.lines[-1].line
 
 
 def find_lyrics_in_file(lyrics_file, songtitle):
