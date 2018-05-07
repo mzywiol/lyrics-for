@@ -8,9 +8,49 @@
         "lastLine": "Here we come, fife and drum, under the radar we crept on!"
       },
       {
+        "title": "Building Steam",
+        "firstLine": "I, I've suffered long enough in this ghost town",
+        "lastLine": "repeat last three lines 5x"
+      },
+      {
         "title": "Until The Day You Die",
         "firstLine": "I've chased this dream since I was five",
         "lastLine": "Until the day I die"
+      },
+      {
+        "title": "My Life",
+        "firstLine": "My love",
+        "lastLine": "And abuse"
+      },
+      {
+        "title": "Wanderlust",
+        "firstLine": "This world is filled with islands",
+        "lastLine": "Alive!"
+      },
+      {
+        "title": "Throw Them Overboard",
+        "firstLine": "If you map out my psychology",
+        "lastLine": "And you can line them up and throw them overboard!"
+      },
+      {
+        "title": "The Derelict",
+        "firstLine": "Fifteen men on the Dead Man's chest",
+        "lastLine": "Yo-Ho-Ho and a bottle of rum!"
+      },
+      {
+        "title": "Victoria",
+        "firstLine": "Victoria, come back to me",
+        "lastLine": "Why did I let you leave?"
+      },
+      {
+        "title": "Ather Shanty",
+        "firstLine": "My arms aching, back's breaking, legs aching, neck",
+        "lastLine": "No telling just now what we have in store."
+      },
+      {
+        "title": "The Clock Yard",
+        "firstLine": "There was a young boy in a clock yard",
+        "lastLine": "I must leave.\""
       },
       {
         "title": "Too Far To Turn Back",
@@ -23,9 +63,38 @@
     "file": "efrafa.txt",
     "songs": [
       {
+        "title": "Simulacrum",
+        "firstLine": "These throws of rapture, kindly hands caress broken bones, hands that cut through parched soul like a sharpened stone. What is it that we leave in these fitting moments? Sentiment? These curtains fall and wrap us up in our rigor mortis, the nimble fingers of the black one, his majesty of cold, courting me into sweet abeyance. The malign steely touch of needle thorns massing and directing their gaze on my misfiring neurons. The vestiges of my sickening life, of my loves, my crowning glories, the pain and poetry of a spent existence. He coils up inside me now, kissing me and whispering sweet nothings. The words of release, the words I crave as I lose all, as the clotted mass of cumuli nimbus bows his head in salute. As i claw upwards, as i fall back into oblivion and his words speak out amongst the frightening turbulence, those final fleeting words i coax from his abhorrent throat. \"Will you join my owsla?\"",
+        "lastLine": "These throws of rapture, kindly hands caress broken bones, hands that cut through parched soul like a sharpened stone. What is it that we leave in these fitting moments? Sentiment? These curtains fall and wrap us up in our rigor mortis, the nimble fingers of the black one, his majesty of cold, courting me into sweet abeyance. The malign steely touch of needle thorns massing and directing their gaze on my misfiring neurons. The vestiges of my sickening life, of my loves, my crowning glories, the pain and poetry of a spent existence. He coils up inside me now, kissing me and whispering sweet nothings. The words of release, the words I crave as I lose all, as the clotted mass of cumuli nimbus bows his head in salute. As i claw upwards, as i fall back into oblivion and his words speak out amongst the frightening turbulence, those final fleeting words i coax from his abhorrent throat. \"Will you join my owsla?\""
+      },
+      {
         "title": "Fu Inle",
         "firstLine": "My brother be,",
         "lastLine": "ring the change of days now done."
+      },
+      {
+        "title": "Republic Of Heaven",
+        "firstLine": "We wane in remembrance,",
+        "lastLine": "To this reform!"
+      },
+      {
+        "title": "The Burial",
+        "firstLine": "Like fingers they claw at the sky,",
+        "lastLine": "we ignore their remorse."
+      },
+      {
+        "title": "Woundwort",
+        "firstLine": "At the crux of our nation,",
+        "lastLine": "We suffered far too long."
+      },
+      {
+        "title": "The Sky Suspended",
+        "notFound": true
+      },
+      {
+        "title": "Warren Of Snares",
+        "firstLine": "We can account for the scars in our sides,",
+        "lastLine": "I am legion for we are many."
       }
     ]
   },
@@ -34,8 +103,128 @@
     "songs": [
       {
         "title": "Airportman",
-        "firstLine": "1.  Airportman ",
+        "firstLine": "He moves efficiently",
         "lastLine": "Discounted."
+      },
+      {
+        "title": "Lotus",
+        "firstLine": "Hey hey.",
+        "lastLine": "I ate the lotus"
+      },
+      {
+        "title": "Suspicion",
+        "firstLine": "Now my suspicion's on the rise",
+        "lastLine": "Dream, Dream"
+      },
+      {
+        "title": "Hope",
+        "firstLine": "You want to go out Friday",
+        "lastLine": "You want to go forever."
+      },
+      {
+        "title": "At My Most Beautiful",
+        "firstLine": "I've found a way to make you smile",
+        "lastLine": "A way to make you smile"
+      },
+      {
+        "title": "The Apologist",
+        "firstLine": "They call me the apologist.",
+        "lastLine": "I'm so sorry."
+      },
+      {
+        "title": "Sad Professor",
+        "firstLine": "If we're talking about love",
+        "lastLine": "I hate where I wound up."
+      },
+      {
+        "title": "You're In The Air",
+        "firstLine": "You wanted a challenge",
+        "lastLine": "And I am breathing you"
+      },
+      {
+        "title": "Walk Unafraid",
+        "firstLine": "As the sun comes up, as the moon goes down",
+        "lastLine": "Hold my love or leave me high."
+      },
+      {
+        "title": "Daysleeper",
+        "firstLine": "Receiving department, 3 a.m.",
+        "lastLine": "Daysleeper. Daysleeper. Daysleeper."
+      },
+      {
+        "title": "Diminished",
+        "firstLine": "I watched you fall.",
+        "lastLine": "Does she know I sing?"
+      },
+      {
+        "title": "I'm Not Over You",
+        "firstLine": "I feel great. I lied to save your feelings.",
+        "lastLine": "I'm not over you."
+      },
+      {
+        "title": "Parakeet",
+        "firstLine": "You wake up in the morning",
+        "lastLine": "Baby starts to breathe."
+      }
+    ]
+  },
+  {
+    "file": "lpd.txt",
+    "songs": [
+      {
+        "title": "Black Zone",
+        "firstLine": "They ripped up all the grass and they cut down all the trees, built a fence - little sign says 'Keep away, if you please...' And it was difficult to argue with the trenches and the guns. 50,000 volts, the wires buzzing - touch it and you're D.O.A. (d.c.) Deceased! Your secret's safe with us. The trucks roll in at midnight - skull and crossbones on the headlights. They carry poison, carry fission for the Black Zone... Hear the test-tubes bubble with disease for enemies (I hope there's not a breeze!) And the villigers line up outside with placards, sing 'Abide with me'. The guards just laugh - smoke rises in the distance... Because the Black Zone's here to stay and it's here to protect us, 'til that black and bitter day when test-tube spills and blows us all away.",
+        "lastLine": "They ripped up all the grass and they cut down all the trees, built a fence - little sign says 'Keep away, if you please...' And it was difficult to argue with the trenches and the guns. 50,000 volts, the wires buzzing - touch it and you're D.O.A. (d.c.) Deceased! Your secret's safe with us. The trucks roll in at midnight - skull and crossbones on the headlights. They carry poison, carry fission for the Black Zone... Hear the test-tubes bubble with disease for enemies (I hope there's not a breeze!) And the villigers line up outside with placards, sing 'Abide with me'. The guards just laugh - smoke rises in the distance... Because the Black Zone's here to stay and it's here to protect us, 'til that black and bitter day when test-tube spills and blows us all away."
+      },
+      {
+        "title": "Tower One",
+        "firstLine": "Faces at a window, fingers clutching at the bars.",
+        "lastLine": "Winston, Patrick, April, Philip, Roland, Barry, Sally, Patrick, Me! Me! Mimi..."
+      }
+    ]
+  },
+  {
+    "file": "pendragon.txt",
+    "songs": [
+      {
+        "title": "If I were the wind",
+        "firstLine": "If I were the wind and you were the rain",
+        "lastLine": "My son my son."
+      },
+      {
+        "title": "Faithless",
+        "firstLine": "An old man came here telling tales",
+        "lastLine": "Are those still standing tall beyond the china wall."
+      },
+      {
+        "title": "All Over Now",
+        "firstLine": "From the first drop of blood spilt",
+        "lastLine": "I'll find some comfort here."
+      },
+      {
+        "title": "Give It To Me",
+        "firstLine": "One man fills his pockets with gold",
+        "lastLine": "You cannot put back the fruit on the tree."
+      },
+      {
+        "title": "Green Eyed Angel",
+        "firstLine": "All those friends I've known and lost they tell me it'll be alright.",
+        "lastLine": "Hearts so young against a heart of stone."
+      },
+      {
+        "title": "A Man Of Nomadic Traits",
+        "firstLine": "I am a man of nomadic traits.",
+        "lastLine": "Look with kind and gentle eyes."
+      },
+      {
+        "title": "And Finally...",
+        "firstLine": "Heading for hope - heading for home",
+        "lastLine": "They're flesh and blood they were human beings"
+      },
+      {
+        "title": "King Of The Castle",
+        "firstLine": "Crossing the wastelands to carry me home.",
+        "lastLine": "Free spirit I've travelled so follow me now."
       }
     ]
   }
