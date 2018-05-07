@@ -253,6 +253,64 @@ def find_lyrics_in_file(lyrics_file, songtitle):
     return None
 
 
+# ======================================
+# stuff for reading from and saving to mp3 tags...
 
 
+from mutagen import id3, easyid3
 
+
+def lyrics_getter(inst, key):
+    uslt_key = 'USLT::eng'
+    uslt_frame = inst.get(uslt_key)
+    return uslt_frame.text if uslt_frame else None
+
+
+def lyrics_setter(inst, key, lyrics_arr):
+    lyrics = lyrics_arr[0]
+    uslt_key = 'USLT::eng'
+    uslt_frame = inst.get(uslt_key)
+    if uslt_frame:
+        uslt_frame.text = lyrics
+    else:
+        inst.add(id3.USLT(id3.Encoding.UTF8, lang='eng', desc='', text=lyrics))
+
+
+def lyrics_deleter(inst, key):
+    uslt_key = 'USLT::eng'
+    inst.delall(uslt_key)
+
+
+def lyrics_lister(inst, key):
+    uslt_key = 'USLT::eng'
+    return ['lyrics'] if inst.get(uslt_key) else []
+
+
+easyid3.EasyID3.RegisterKey('lyrics', lyrics_getter, lyrics_setter, lyrics_deleter, lyrics_lister)
+
+
+class SongMP3:
+
+    def __init__(self, mp3file):
+        self.file = mp3file
+        self.tags = tags = easyid3.EasyID3(str(mp3file))  # mp3_file.tags
+        self.title = tags['title'][0]
+        self.album = tags['album'][0] if 'album' in tags else None
+        self.artist = tags['artist'][0] if 'artist' in tags \
+            else tags['albumartist'][0] if 'albumartist' in tags \
+            else None
+        self.year = tags['date'][0] if 'date' in tags else None
+
+        if 'tracknumber' in tags:
+            m = re.match("(\\d+)(/(\\d+))?", tags['tracknumber'][0])
+            if m:
+                self.tracknumber = int(m.group(1))
+        else:
+            self.tracknumber = None
+
+    def __unicode__(self):
+        return f"Song \"{self.title}\" by {self.artist}, #{self.tracknumber} " \
+               f"on the album \"{self.album}\" ({self.year})"
+
+    def __str__(self):
+        return self.__unicode__()
