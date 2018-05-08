@@ -4,7 +4,7 @@ from pathlib import Path
 from src import lyrics
 
 test_resources_dir = Path("resources")
-test_data_filename = "expected.json"
+test_data_filename = "expected2.json"
 
 BLANK = lyrics.BlankLine
 SEP = lyrics.Separator
@@ -122,7 +122,7 @@ class LyricsTest(unittest.TestCase):
     with open(test_data_file) as tf:
         test_data = json.load(tf)
 
-    def test_lyrics_files_exist(self):
+    def test_find_lyrics_in_txt_file(self):
         for single_lyrics_file in self.test_data:
             filename = single_lyrics_file['file']
             for single_song in single_lyrics_file['songs']:
@@ -132,6 +132,7 @@ class LyricsTest(unittest.TestCase):
                     if "notFound" in single_song:
                         self.assertIsNone(found_lyrics)
                     else:
+                        self.assertIsNotNone(found_lyrics)
                         self.assertEqual(found_lyrics[0], single_song['firstLine'])
                         self.assertEqual(found_lyrics[-1], single_song['lastLine'])
 

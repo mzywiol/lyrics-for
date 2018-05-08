@@ -213,11 +213,26 @@ def analyze_lyrics_file(file_lines):
 
 
 def normalize(line):
-    return line.lower()
+    return re.sub(r"\s", "", line.lower())
+
+
+def ratio(a, b):
+    return a/b if a <= b else b/a
 
 
 def similarity(line, title):
-    return difflib.SequenceMatcher(None, normalize(line), title).ratio()
+    normalized = normalize(line)
+    # ratio of SequenceMatcher for the whole line
+    # return difflib.SequenceMatcher(None, title, normalized).ratio()
+    # alternatively: Matching ratio for the longest matching substring
+    seqmat = difflib.SequenceMatcher(lambda c: c in ['\'`'], title, normalized)
+    matching = seqmat.get_matching_blocks()
+    if len(matching) > 1:
+        longest_match_begins = matching[0].b
+        longest_match_ends = matching[-2].b + matching[-2].size
+        longest_match = normalized[longest_match_begins:longest_match_ends]
+        return difflib.SequenceMatcher(None, title, longest_match).ratio() * ratio(len(longest_match), len(title))
+    return 0
 
 
 def find_song_header(lyrics_file, song_title):

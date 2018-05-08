@@ -227,5 +227,38 @@
         "lastLine": "Free spirit I've travelled so follow me now."
       }
     ]
+  },
+  {
+    "file": "mesh.txt",
+    "songs": [
+      {
+        "title": "Firefly",
+        "firstLine": "Throw the towel in",
+        "lastLine": "I think we made it better"
+      },
+      {
+        "title": "Leave You Nothing",
+        "firstLine": "One hour on a Sunday",
+        "lastLine": "Chorus"
+      },
+      {
+        "title": "The Place You Hide",
+        "firstLine": "I could never fall for you",
+        "lastLine": "Chorus"
+      },
+      {
+        "title": "I Can't Imagine How It Hurts",
+        "notFound": true
+      },
+      {
+        "title": "The trouble we're in",
+        "firstLine": "f you wanted to get things over and done with",
+        "lastLine": "No, you're really not aware of the trouble that we're in"
+      },
+      {
+        "title": "Friends Like These",
+        "notFound": true
+      }
+    ]
   }
 ]
