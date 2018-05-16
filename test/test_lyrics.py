@@ -98,6 +98,15 @@ class LyricsTest(unittest.TestCase):
                                        "Building Steam": "Building Steam",
                                        "Until The Day You Die": "Until The Day You Die",
                                        "Too Far To Turn Back": "Too Far To Turn Back"},
+                     "mos.txt": {"Don't Say a Word": "1. Don't Say A Word (Metal Gear Solid V: Phantom Pain) 03:38",
+                                 "London Town": "2. London Town (Assassin's Creed: Syndicate) 03:58",
+                                 "Stand By My Side": "5. Stay By My Side (Journey) 03:55",
+                                 "Evacuate": "9. Evacuate 03:49",
+                                 "Friends": "7. Friends (Guardians of the Galaxy - Movie) 03:48",
+                                 "Paleblood Moon": "11. Paleblood Moon (Bloodborne) 04:30",
+                                 "Friends To Foes": "12. Friends To Foes (Halo V) 04:54",
+                                 "Metasonic": "13. Metasonic 04:31",
+                                 "Hard Cash 2015": "15. Hard Cash 2015 (GTA V) 04:11"},
                      "efrafa.txt": {"Simulacrum": "1. Simulacrum",
                                     "Fu Inle": "2. Fu Inl�",
                                     "Republic Of Heaven": "3. Republic Of Heaven",
@@ -108,8 +117,9 @@ class LyricsTest(unittest.TestCase):
                                        "Goodbye Blue Sky": "GOODBYE BLUE SKY",
                                        "In The Flesh": "IN THE FLESH"},
                      "mesh.txt": {"Firefly": "1. Firefly",
-                                  "The Place You Hide": "10. The Place You Hide",
-                                  "Friends Like These": None}}
+                                  # "The Place You Hide": "10. The Place You Hide",
+                                  "Friends Like These": None},
+                     }
 
         for file in expecteds:
             for song in expecteds[file]:

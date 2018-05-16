@@ -1,40 +1,5 @@
 #!/usr/bin/python3
 
-"""
-approach: analyze file, look for structure: separators, song lyric headlines format, look for promising lines and
-
-record separators (their format, symbols used)
-    are they before headline? SEPARATOR or UNDERLINE or both
-        if there are pairs very close to each other, then both
-record lines starting with numbers
-    analyze: are they incremental?
-    is there more than one incremental set? -> may be multiple disc, may be tracklist at the beginning
-        divide into incremental sets
-        secord separator after number (. or ) or anything else)
-        is there tracklength at the end?
-            record for this set
-        are the numbered lines close to each other? -> indicates tracklist
-        are there separators before or after each numbered line? -> indicates lyrics; record
-    ignore tracklists
-if SEPARATORS and NUMBERED LINES:
-    find numbered line with song title just before or after a SEPARATOR -> this is where LYRIC BEGIN
-    //ignore UNDERLINE
-    find another separator -> this is where LYRIC ENDS
-if NUMBERED LINES only:
-    find numbered line with song title -> this is where LYRIC BEGIN
-    find next numbered line -> this is where LYRIC ENDS
-if SEPARATOR only:
-    check lines just before and just after the SEPARATORS for their similarity to the title
-    if just before, SEPARATOR is UNDERLINE -> this is where LYRIC BEGIN
-    find another separator -> this is where LYRIC ENDS
-if neither:
-    find lines containing title
-    lines ending with song length are good candidates for headline -> this is where LYRIC BEGIN
-        otherwise, evaluate by similarity
-        the first most similar will be where LYRIC BEGIN
-    consume lines until first GAP longer than previous GAPS. -> this is where LYRIC ENDS
-"""
-
 import sys
 import re
 import difflib
@@ -68,8 +33,8 @@ def read_lines_from_file(filename):
 
 
 regex_separator = r"^(\W\W?)\1*\W?$"
-regex_numbered_line = r"^(?:#?)(\d+)(\W+)\w*"
-regex_tracklength = r".*\d{1,2}[:]\d\d\s*$"
+regex_numbered_line = r"^(?:#?)(\d+)(\W+)(.+)"
+regex_tracklength = r"(.+)\s+(?:\(\d{1,2}[:]\d\d\)|\d{1,2}[:]\d\d)\s*$"
 
 # Meat
 
@@ -125,11 +90,14 @@ class TextLine(LineType):
         super().__init__(prev)
         self.line = line
         number_match = re.match(regex_numbered_line, self.line)
-        (self.number, self.number_separator) = \
-            (int(number_match.group(1)), number_match.group(2)) if number_match \
-            else (None, None)
-        self.has_tracklength = re.match(regex_tracklength, self.line) is not None
-        self.is_all_uppercase = len(re.sub(r"[^a-z]", "", self.line)) == 0
+        (self.number, self.number_separator, self.essence) = \
+            (int(number_match.group(1)), number_match.group(2), number_match.group(3)) if number_match \
+            else (None, None, line.strip())
+        tracklen_match = re.match(regex_tracklength, self.essence)
+        (self.has_tracklength, self.essence) = \
+            (True, tracklen_match.group(1)) if tracklen_match \
+            else (False, self.essence)
+        self.is_all_uppercase = len(re.sub(r"[^a-z]", "", self.essence)) == 0
 
     def is_numbered(self):
         return self.number is not None
@@ -216,36 +184,68 @@ def normalize(line):
     return re.sub(r"\s", "", line.lower())
 
 
+def vector_diff(of, model):
+    import math
+    diffs = 0.0
+    for key in model:
+        diffs += (of[key] - model[key]) ** 2
+    return math.sqrt(diffs)
+
+
 def ratio(a, b):
     return a/b if a <= b else b/a
 
 
-def similarity(line, title):
-    normalized = normalize(line)
-    # ratio of SequenceMatcher for the whole line
-    # return difflib.SequenceMatcher(None, title, normalized).ratio()
-    # alternatively: Matching ratio for the longest matching substring
-    seqmat = difflib.SequenceMatcher(lambda c: c in ['\'`'], title, normalized)
-    matching = seqmat.get_matching_blocks()
-    if len(matching) > 1:
-        longest_match_begins = matching[0].b
-        longest_match_ends = matching[-2].b + matching[-2].size
-        longest_match = normalized[longest_match_begins:longest_match_ends]
-        return difflib.SequenceMatcher(None, title, longest_match).ratio() * ratio(len(longest_match), len(title))
-    return 0
+def similarity(title, model_vector):
+    normalized_title = normalize(title)
+
+    def title_isjunk(c):
+        return c in ['\'`']
+
+    def similarity_to(line):
+        normalized_line = normalize(line)
+        vector = {
+            # ratio of SequenceMatcher for the whole line
+            "similarity_whole": difflib.SequenceMatcher(title_isjunk, normalized_title, normalized_line).ratio(),
+            # "similarity_longest": 0.0,
+            # "longest_length_ratio": 0.0
+        }
+        seqmat = difflib.SequenceMatcher(title_isjunk, normalized_title, normalized_line)
+        matching = seqmat.get_matching_blocks()
+
+        # longest exact match
+        longest_exact_match = sorted(matching, key=lambda mt: mt.size, reverse=True)[0]
+        vector["longest_exact_match"] = ratio(longest_exact_match.size, len(normalized_title))
+        after_match = normalized_line[(longest_exact_match.b + longest_exact_match.size):]
+        vector["nothing_after_match"] = (len(after_match) == 0) or (not after_match[0].isalnum())
+
+        # longest match: where first exact match starts to where last exact match ends
+        # if len(matching) > 1:
+        #     longest_match_begins = matching[0].b
+        #     longest_match_ends = matching[-2].b + matching[-2].size
+        #     longest_match = normalized_line[longest_match_begins:longest_match_ends]
+        #     vector["similarity_longest"] = difflib.SequenceMatcher(title_isjunk, normalized_title, longest_match).ratio()
+        #     vector["longest_length_ratio"] = ratio(len(longest_match), len(normalized_title))
+
+        return vector_diff(vector, model_vector)
+
+    return similarity_to
 
 
 def find_song_header(lyrics_file, song_title):
-    normalized_title = normalize(song_title)
     parts = analyze_lyrics_file(read_lines_from_file(lyrics_file))
     scores = sorted(set([p.song_begins_score for p in parts if p.song_begins_score > 0]), reverse=True)
-    similarity_threshold = 0.5
+    similarity_threshold = 0.9
+    model_vector = {"similarity_whole": 1.0,
+                    "longest_exact_match": 1.0,
+                    "nothing_after_match": True}
+    similarity_to = similarity(song_title, model_vector)
     for s in scores:
-        parts_with_ratio = {p: similarity(p.lines[0].line, normalized_title) for p in parts
+        parts_with_ratio = {p: similarity_to(p.lines[0].essence) for p in parts
                             if p.song_begins_score == s}
         try:
-            return sorted([p for p in parts_with_ratio if parts_with_ratio[p] >= similarity_threshold],
-                          key=lambda part: parts_with_ratio[part], reverse=True)[0]
+            return sorted([p for p in parts_with_ratio if parts_with_ratio[p] <= similarity_threshold],
+                          key=lambda part: parts_with_ratio[part])[0]
         except IndexError:
             continue
     return None
@@ -278,7 +278,7 @@ def find_lyrics_in_file(lyrics_file, song_title):
     while cur_part.next is not None:
         next_part = cur_part.next
         if next_part.type is Separator or ((next_part.type is TextLine)
-                                           and (next_part.song_begins_score == title_score)):
+                                           and (next_part.song_begins_score >= title_score)):
             break
         if next_part.type in [TextLine, BlankLine]:
             lyrics += next_part.to_lines()
