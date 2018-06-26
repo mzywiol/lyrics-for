@@ -3,6 +3,7 @@
 import sys
 import re
 import difflib
+import itertools
 
 # Utility functions
 
@@ -32,8 +33,19 @@ def read_lines_from_file(filename):
     return filelines
 
 
-regex_separator = r"^(\W\W?)\1*\W?$"
-regex_numbered_line = r"^(?:#?)(\d+)(\W+)(.+)"
+def parse_roman(s, sofar=0):
+    if len(s) == 0:
+        return sofar
+    double = {"cm": -100, "cd": -100, "xc": -10, "xl": -10, "ix": -1, "iv": -1}
+    single = {"m": 1000, "d": 500, "c": 100, "l": 50, "x": 10, "v": 5, "i": 1}
+    chomp = double.get(s[0:2].lower(), single.get(s[0].lower()))
+    if chomp is None:
+        raise ValueError("Could not parse roman numeral %s" % s)
+    return parse_roman(s[1:], sofar + chomp)
+
+
+regex_separator = r"^(\W\W?)\1+\W?$"
+regex_numbered_line = r"^(?:#?)(\d+|[mdclxvi]+)(\W+)(.+)"
 regex_tracklength = r"(.+)\s+(?:\(\d{1,2}[:]\d\d\)|\d{1,2}[:]\d\d)\s*$"
 
 # Meat
@@ -88,11 +100,22 @@ class UnderLine(LineType):
 class TextLine(LineType):
     def __init__(self, line, prev):
         super().__init__(prev)
+        self.number = self.number_separator = None
         self.line = line
-        number_match = re.match(regex_numbered_line, self.line)
-        (self.number, self.number_separator, self.essence) = \
-            (int(number_match.group(1)), number_match.group(2), number_match.group(3)) if number_match \
-            else (None, None, line.strip())
+        self.essence = line.strip()
+        number_match = re.match(regex_numbered_line, self.essence)
+        if number_match:
+            number = number_match.group(1)
+            if re.match(r"\d+", number):
+                (self.number, self.number_separator, self.essence) = \
+                    (int(number), number_match.group(2), number_match.group(3))
+            else:
+                try:
+                    (self.number, self.number_separator, self.essence) = \
+                        (parse_roman(number), number_match.group(2), number_match.group(3))
+                except ValueError:
+                    pass
+
         tracklen_match = re.match(regex_tracklength, self.essence)
         (self.has_tracklength, self.essence) = \
             (True, tracklen_match.group(1)) if tracklen_match \
@@ -106,7 +129,7 @@ class TextLine(LineType):
         return f"{self.line[:7]}..."
 
     def title_score(self):
-        return truths(self.is_numbered(), self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
+        return self.is_numbered() * 2 + truths(self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
 
 
 def monotonic(ints):
@@ -202,30 +225,17 @@ def similarity(title, model_vector):
     def title_isjunk(c):
         return c in ['\'`']
 
-    def similarity_to(line):
+    def similarity_to(line, init_vector):
         normalized_line = normalize(line)
-        vector = {
-            # ratio of SequenceMatcher for the whole line
-            "similarity_whole": difflib.SequenceMatcher(title_isjunk, normalized_title, normalized_line).ratio(),
-            # "similarity_longest": 0.0,
-            # "longest_length_ratio": 0.0
-        }
         seqmat = difflib.SequenceMatcher(title_isjunk, normalized_title, normalized_line)
         matching = seqmat.get_matching_blocks()
-
-        # longest exact match
         longest_exact_match = sorted(matching, key=lambda mt: mt.size, reverse=True)[0]
-        vector["longest_exact_match"] = ratio(longest_exact_match.size, len(normalized_title))
         after_match = normalized_line[(longest_exact_match.b + longest_exact_match.size):]
-        vector["nothing_after_match"] = (len(after_match) == 0) or (not after_match[0].isalnum())
-
-        # longest match: where first exact match starts to where last exact match ends
-        # if len(matching) > 1:
-        #     longest_match_begins = matching[0].b
-        #     longest_match_ends = matching[-2].b + matching[-2].size
-        #     longest_match = normalized_line[longest_match_begins:longest_match_ends]
-        #     vector["similarity_longest"] = difflib.SequenceMatcher(title_isjunk, normalized_title, longest_match).ratio()
-        #     vector["longest_length_ratio"] = ratio(len(longest_match), len(normalized_title))
+        vector = {**init_vector, **{
+            "similarity_whole": seqmat.ratio(),
+            "longest_exact_match": ratio(longest_exact_match.size, len(normalized_title)),
+            "nothing_after_match": (len(after_match) == 0) or (not after_match[0].isalnum())
+        }}
 
         return vector_diff(vector, model_vector)
 
@@ -234,21 +244,24 @@ def similarity(title, model_vector):
 
 def find_song_header(lyrics_file, song_title):
     parts = analyze_lyrics_file(read_lines_from_file(lyrics_file))
-    scores = sorted(set([p.song_begins_score for p in parts if p.song_begins_score > 0]), reverse=True)
     similarity_threshold = 0.9
+    song_title_score_histogram = dict(map(lambda k: (k[0], list(k[1])),
+                                          itertools.groupby(sorted(filter(lambda p: p.song_begins_score > 0, parts),
+                                                                   key=lambda p: p.song_begins_score),
+                                                            key=lambda p: p.song_begins_score)))
+    model_song_title_score = sorted(song_title_score_histogram, key=lambda k: k ** 2 * len(song_title_score_histogram[k]), reverse=True)[0]
     model_vector = {"similarity_whole": 1.0,
                     "longest_exact_match": 1.0,
-                    "nothing_after_match": True}
+                    "nothing_after_match": True,
+                    "title_score": 1.0}
     similarity_to = similarity(song_title, model_vector)
-    for s in scores:
-        parts_with_ratio = {p: similarity_to(p.lines[0].essence) for p in parts
-                            if p.song_begins_score == s}
-        try:
-            return sorted([p for p in parts_with_ratio if parts_with_ratio[p] <= similarity_threshold],
-                          key=lambda part: parts_with_ratio[part])[0]
-        except IndexError:
-            continue
-    return None
+    parts_with_ratio = {p: similarity_to(p.lines[0].essence, {"title_score": p.song_begins_score / model_song_title_score})
+                        for p in parts if p.song_begins_score > 0}
+    try:
+        return sorted([p for p in parts_with_ratio if parts_with_ratio[p] <= similarity_threshold],
+                  key=lambda part: parts_with_ratio[part])[0]
+    except IndexError:
+        return None
 
 
 def strip(arr):

@@ -4,7 +4,7 @@ from pathlib import Path
 from src import lyrics
 
 test_resources_dir = Path("resources")
-test_data_filename = "expected2.json"
+test_data_filename = "expected.json"
 
 BLANK = lyrics.BlankLine
 SEP = lyrics.Separator
@@ -93,7 +93,9 @@ class LyricsFileAnalysis(unittest.TestCase):
 
 class LyricsTest(unittest.TestCase):
     def test_lyrics_begin(self):
-        expecteds = {"abneypark.txt": {"No Such Song": None,
+        expecteds = {
+                     "lpd.txt": {"Tower One": "Tower One"},
+                     "abneypark.txt": {"No Such Song": None,
                                        "Under the Radar": "Under the Radar",
                                        "Building Steam": "Building Steam",
                                        "Until The Day You Die": "Until The Day You Die",
@@ -117,8 +119,14 @@ class LyricsTest(unittest.TestCase):
                                        "Goodbye Blue Sky": "GOODBYE BLUE SKY",
                                        "In The Flesh": "IN THE FLESH"},
                      "mesh.txt": {"Firefly": "1. Firefly",
-                                  # "The Place You Hide": "10. The Place You Hide",
+                                  "The Place You Hide": "10. The Place You Hide",
                                   "Friends Like These": None},
+                     "pendragon.txt": {"If I were the wind": "If I were the wind",
+                                       "Faithless": "i) Faithless",
+                                       "All Over Now": "ii) All Over Now",
+                                       "Not Of This World": "i) Not Of This World",
+                                       "Green Eyed Angel": "iii) Green Eyed Angel",
+                                       "And Finally...": "ii) And Finally..."}
                      }
 
         for file in expecteds:
