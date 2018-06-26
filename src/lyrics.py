@@ -171,7 +171,7 @@ class Blob:
                (self.prev.type is BlankLine and self.prev.preceded_by_separator())
 
     def count_score(self):
-        self.song_begins_score = self.lines[0].title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
+        self.song_begins_score = self.header.title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
 
     def to_lines(self):
         return [l.line for l in self.lines] + [""] * self.blanks
@@ -255,7 +255,7 @@ def find_song_header(lyrics_file, song_title):
                     "nothing_after_match": True,
                     "title_score": 1.0}
     similarity_to = similarity(song_title, model_vector)
-    parts_with_ratio = {p: similarity_to(p.lines[0].essence, {"title_score": p.song_begins_score / model_song_title_score})
+    parts_with_ratio = {p: similarity_to(p.header.essence, {"title_score": p.song_begins_score / model_song_title_score})
                         for p in parts if p.song_begins_score > 0}
     try:
         return sorted([p for p in parts_with_ratio if parts_with_ratio[p] <= similarity_threshold],
@@ -361,3 +361,21 @@ class SongMP3:
 
     def __str__(self):
         return self.__unicode__()
+
+
+### params:
+# $ lyrics.py
+# $ --for [song mp3 file(s) or song title(s); REQUIRED]
+# $ --from [txt file if 'txt' or specified and exists, tag in mp3 file if 'tag', url to a lyrics service if given, DEFAULT mp3 tag or automatically found lyrics file]
+# $ --to [txt file if given, mp3 tag if 'tag', DEFAULT write to screen]
+# $ --write [shorthand for --to tag]
+
+# TODO:
+# parsing args
+# reading tags from file (see lyricsfor.py)
+# reading lyrics from file (see lyricsfor.py)
+# finding default txt file (see lyricsfor.py)
+# saving lyrics to txt file
+# saving lyrics to mp3 tag
+# querying internet lyrics databases:
+#    ???
