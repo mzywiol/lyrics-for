@@ -4,6 +4,10 @@ import sys
 import re
 import difflib
 import itertools
+from mutagen import id3, easyid3
+import argparse
+from pathlib import Path
+
 
 # Utility functions
 
@@ -48,7 +52,8 @@ regex_separator = r"^(\W\W?)\1+\W?$"
 regex_numbered_line = r"^(?:#?)(\d+|[mdclxvi]+)(\W+)(.+)"
 regex_tracklength = r"(.+)\s+(?:\(\d{1,2}[:]\d\d\)|\d{1,2}[:]\d\d)\s*$"
 
-# Meat
+
+# Recognizing and stripping song lyrics from a text file
 
 
 class LineType:
@@ -119,7 +124,7 @@ class TextLine(LineType):
         tracklen_match = re.match(regex_tracklength, self.essence)
         (self.has_tracklength, self.essence) = \
             (True, tracklen_match.group(1)) if tracklen_match \
-            else (False, self.essence)
+                else (False, self.essence)
         self.is_all_uppercase = len(re.sub(r"[^a-z]", "", self.essence)) == 0
 
     def is_numbered(self):
@@ -171,7 +176,7 @@ class Blob:
                (self.prev.type is BlankLine and self.prev.preceded_by_separator())
 
     def count_score(self):
-        self.song_begins_score = self.header.title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
+        self.song_begins_score = self.header().title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
 
     def to_lines(self):
         return [l.line for l in self.lines] + [""] * self.blanks
@@ -216,7 +221,7 @@ def vector_diff(of, model):
 
 
 def ratio(a, b):
-    return a/b if a <= b else b/a
+    return a / b if a <= b else b / a
 
 
 def similarity(title, model_vector):
@@ -242,45 +247,46 @@ def similarity(title, model_vector):
     return similarity_to
 
 
-def find_song_header(lyrics_file, song_title):
-    parts = analyze_lyrics_file(read_lines_from_file(lyrics_file))
+def find_song_header(file_lines, song_title):
+    parts = analyze_lyrics_file(file_lines)
     similarity_threshold = 0.9
     song_title_score_histogram = dict(map(lambda k: (k[0], list(k[1])),
                                           itertools.groupby(sorted(filter(lambda p: p.song_begins_score > 0, parts),
                                                                    key=lambda p: p.song_begins_score),
                                                             key=lambda p: p.song_begins_score)))
-    model_song_title_score = sorted(song_title_score_histogram, key=lambda k: k ** 2 * len(song_title_score_histogram[k]), reverse=True)[0]
+    model_song_title_score = \
+        sorted(song_title_score_histogram, key=lambda k: k ** 2 * len(song_title_score_histogram[k]), reverse=True)[0]
     model_vector = {"similarity_whole": 1.0,
                     "longest_exact_match": 1.0,
                     "nothing_after_match": True,
                     "title_score": 1.0}
     similarity_to = similarity(song_title, model_vector)
-    parts_with_ratio = {p: similarity_to(p.header.essence, {"title_score": p.song_begins_score / model_song_title_score})
-                        for p in parts if p.song_begins_score > 0}
+    parts_with_ratio = {
+        p: similarity_to(p.header().essence, {"title_score": p.song_begins_score / model_song_title_score})
+        for p in parts if p.song_begins_score > 0}
     try:
         return sorted([p for p in parts_with_ratio if parts_with_ratio[p] <= similarity_threshold],
-                  key=lambda part: parts_with_ratio[part])[0]
+                      key=lambda part: parts_with_ratio[part])[0]
     except IndexError:
         return None
 
 
 def strip(arr):
-    first, last = 0, len(arr)-1
+    first, last = 0, len(arr) - 1
     while first <= last and arr[first] == "":
         first += 1
     while first <= last and arr[last] == "":
         last -= 1
-    return arr[first:last+1]
+    return arr[first:last + 1]
 
 
 def find_lyrics_in_file(lyrics_file, song_title):
-
     file_lines = read_lines_from_file(lyrics_file)
     if len(file_lines) == 0:
         err(f"> File {lyrics_file} is empty.")
         return None
 
-    lyrics_header = find_song_header(lyrics_file, song_title)
+    lyrics_header = find_song_header(file_lines, song_title)
     if lyrics_header is None:
         err(f"> Lyrics for {song_title} not found in {lyrics_file}.")
         return None
@@ -304,18 +310,16 @@ def find_lyrics_in_file(lyrics_file, song_title):
 # stuff for reading from and saving to mp3 tags...
 
 
-from mutagen import id3, easyid3
+uslt_key = 'USLT::eng'
 
 
 def lyrics_getter(inst, key):
-    uslt_key = 'USLT::eng'
     uslt_frame = inst.get(uslt_key)
     return uslt_frame.text if uslt_frame else None
 
 
 def lyrics_setter(inst, key, lyrics_arr):
     lyrics = lyrics_arr[0]
-    uslt_key = 'USLT::eng'
     uslt_frame = inst.get(uslt_key)
     if uslt_frame:
         uslt_frame.text = lyrics
@@ -324,12 +328,10 @@ def lyrics_setter(inst, key, lyrics_arr):
 
 
 def lyrics_deleter(inst, key):
-    uslt_key = 'USLT::eng'
     inst.delall(uslt_key)
 
 
 def lyrics_lister(inst, key):
-    uslt_key = 'USLT::eng'
     return ['lyrics'] if inst.get(uslt_key) else []
 
 
@@ -337,9 +339,21 @@ easyid3.EasyID3.RegisterKey('lyrics', lyrics_getter, lyrics_setter, lyrics_delet
 
 
 class SongMP3:
+    @staticmethod
+    def from_path(path):
+        import glob
+        return list(filter(lambda s: s is not None, map(lambda f: SongMP3.from_file(f), sorted(glob.glob(path)))))
+
+    @staticmethod
+    def from_file(filename):
+        song = None
+        try:
+            song = SongMP3(filename)
+        finally:
+            return song
 
     def __init__(self, mp3file):
-        self.file = mp3file
+        self.path = mp3file
         self.tags = tags = easyid3.EasyID3(str(mp3file))  # mp3_file.tags
         self.title = tags['title'][0]
         self.album = tags['album'][0] if 'album' in tags else None
@@ -347,7 +361,6 @@ class SongMP3:
             else tags['albumartist'][0] if 'albumartist' in tags \
             else None
         self.year = tags['date'][0] if 'date' in tags else None
-
         if 'tracknumber' in tags:
             m = re.match("(\\d+)(/(\\d+))?", tags['tracknumber'][0])
             if m:
@@ -355,25 +368,108 @@ class SongMP3:
         else:
             self.tracknumber = None
 
-    def __unicode__(self):
+    def __repr__(self):
         return f"Song \"{self.title}\" by {self.artist}, #{self.tracknumber} " \
                f"on the album \"{self.album}\" ({self.year})"
 
-    def __str__(self):
-        return self.__unicode__()
+
+# Parsing arguments
+
+
+parser = argparse.ArgumentParser(prog="LYRICS",
+                                 description="Find lyrics for given song(s) within mp3 tags or text file.\n"
+                                             "Prints it out to console, to a txt file or saves it to mp3 tags.")
+
+# SONGS - this can be a (possibly wildcard) path if you want one (or more) mp3 files.
+# If path doesn't resolve to any mp3 files, this is treated as a explicitly given song title.
+parser.add_argument('--for', '-f', '-4', required=True, dest='songs',
+                    help="Song or songs to look for lyrics to. By default resolves to mp3 file "
+                         "(or multiple files if wildcard path is given, to resolve one file at a time).\n"
+                         "If it doesn't point to any mp3 file, it is treated as explicitly given song title.")
+
+# SOURCE - source of lyrics: if not given, defaults to, in that order: mp3 tag, local txt file.
+# If given, is resolved to a txt file to look for lyrics in.
+parser.add_argument('--source', '--from', '-s',
+                    help="Song or songs to look for lyrics to. By default resolves to tags in mp3 file "
+                         "(or multiple files if wildcard path is given, to resolve one file at a time).\n"
+                         "If args is not given and lyrics aren't in mp3 file, looks for a lyrics text file.")
+
+# TARGET - what to do with obtained lyrics? Save to txt file? Append to file? Print out to stdout?
+# By default prints out.
+parser.add_argument('--to', '-t', '-2', dest='target',
+                    help="Target for the obtained lyrics. Defaults to print out to console.\n"
+                         "If given, saves to given txt file. If the file exists, the lyrics will be appended.")
+# OUT - flag to print lyrics to console
+parser.add_argument('--out', '-o', action='store_true',
+                    help="Flag to print obtained lyrics out to console.")
+# SAVE - flag to save lyrics to mp3 file(s) tags
+parser.add_argument('--save', action='store_true',
+                    help="Flag to save obtained lyrics to an ID3 tag in respective mp3 file(s)'.\n"
+                         "If given, lyrics will not be printed out unless --to option is given specifically")
+
+args = parser.parse_args()
+
+# existing files matching the given path
+songs = SongMP3.from_path(args.songs)
+if not songs:
+    songs = [args.songs]
+
+
+def lyrics_files(song):
+    directory = Path(".")
+    txt_file_templates = [r'lyrics']
+    if type(song) is SongMP3:
+        directory = Path(song.path).parent
+        if song.album is not None:
+            txt_file_templates.append(song.album.lower())
+            if song.artist is not None:
+                txt_file_templates.append(song.artist.lower() + " - " + song.album.lower())
+    simi_threshold = 0.6
+    txt_files = [f for f in directory.iterdir() if f.suffix == ".txt"]
+    return (triple[0] for triple in sorted(
+        filter(lambda triple: triple[2] > simi_threshold,
+               [(file, template, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
+                for file in txt_files
+                for template in txt_file_templates]),
+        key=lambda triple: triple[2], reverse=True))
+
+
+def find_song_lyrics(title, source):
+    if source is None:  # from tags or find txt file
+        if type(song) is SongMP3 and song.tags['lyrics']:
+            return song.tags['lyrics']
+        else:
+            for filename in lyrics_files(song):
+                lyrics = find_lyrics_in_file(filename, title)
+                if lyrics is not None:
+                    return "\r\n".join(lyrics)
+    else:
+        return find_lyrics_in_file(source, title)
+
+
+song_lyrics = {}
+for song in songs:
+    lyrics = find_song_lyrics(song.title if type(song) is SongMP3 else song, args.source)
+    if lyrics is not None:
+        song_lyrics[song] = lyrics
+
+for song in songs:
+    if song in song_lyrics:
+        print(song_lyrics[song])
+
 
 
 ### params:
 # $ lyrics.py
-# $ --for [song mp3 file(s) or song title(s); REQUIRED]
-# $ --from [txt file if 'txt' or specified and exists, tag in mp3 file if 'tag', url to a lyrics service if given, DEFAULT mp3 tag or automatically found lyrics file]
+# $ -4 --for [song mp3 file(s) or song title(s); REQUIRED]
+# $ -s --source [txt file if 'txt' or specified and exists, tag in mp3 file if 'tag', url to a lyrics service if given, DEFAULT mp3 tag or automatically found lyrics file]
 # $ --to [txt file if given, mp3 tag if 'tag', DEFAULT write to screen]
 # $ --write [shorthand for --to tag]
 
 # TODO:
 # parsing args
-# reading tags from file (see lyricsfor.py)
-# reading lyrics from file (see lyricsfor.py)
+# reading tags from mp3 file (see lyricsfor.py) -> done
+# reading lyrics from txt file (see lyricsfor.py)
 # finding default txt file (see lyricsfor.py)
 # saving lyrics to txt file
 # saving lyrics to mp3 tag
