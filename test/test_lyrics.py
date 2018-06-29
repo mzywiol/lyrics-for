@@ -25,16 +25,16 @@ class CompareEasily:
 
 class UtilTest(unittest.TestCase):
     def test_monotonic(self):
-        self.assertTrue(lyrics.monotonic([]))
-        self.assertTrue(lyrics.monotonic([1]))
-        self.assertTrue(lyrics.monotonic([1, 2]))
-        self.assertTrue(lyrics.monotonic([1, 2, 3]))
-        self.assertTrue(lyrics.monotonic([1, 1, 3]))
-        self.assertTrue(lyrics.monotonic([1, 3, 100]))
-        self.assertTrue(lyrics.monotonic([1, 3, 100, 100, 101]))
-        self.assertFalse(lyrics.monotonic([2, 1]))
-        self.assertFalse(lyrics.monotonic([2, 2, 1]))
-        self.assertFalse(lyrics.monotonic([2, 3, 4, 5, 4]))
+        self.assertTrue(lyrics.is_monotonic([]))
+        self.assertTrue(lyrics.is_monotonic([1]))
+        self.assertTrue(lyrics.is_monotonic([1, 2]))
+        self.assertTrue(lyrics.is_monotonic([1, 2, 3]))
+        self.assertTrue(lyrics.is_monotonic([1, 1, 3]))
+        self.assertTrue(lyrics.is_monotonic([1, 3, 100]))
+        self.assertTrue(lyrics.is_monotonic([1, 3, 100, 100, 101]))
+        self.assertFalse(lyrics.is_monotonic([2, 1]))
+        self.assertFalse(lyrics.is_monotonic([2, 2, 1]))
+        self.assertFalse(lyrics.is_monotonic([2, 3, 4, 5, 4]))
 
 
 class LinesTest(unittest.TestCase):
@@ -146,7 +146,7 @@ class LyricsTest(unittest.TestCase):
             for single_song in single_lyrics_file['songs']:
                 song_title = single_song['title']
                 with self.subTest(filename=filename, song_title=song_title):
-                    found_lyrics = lyrics.find_lyrics_in_file(test_resources_dir / filename, song_title)
+                    found_lyrics = lyrics.get_lyrics_from_file(test_resources_dir / filename, song_title)
                     if "notFound" in single_song:
                         self.assertIsNone(found_lyrics)
                     else:

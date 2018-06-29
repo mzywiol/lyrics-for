@@ -13,15 +13,16 @@ from pathlib import Path
 
 
 def err(msg):
-    print(f"!!! ${msg}", file=sys.stderr)
+    print(f"!!! {msg}", file=sys.stderr)
 
 
 def log(msg):
-    print(f">>> ${msg}")
+    print(f">>> {msg}")
 
 
-def truths(*bools):
-    return len([b for b in bools if b])
+def weighed_values(*vals_with_weight):
+    return sum(map(lambda val_weight: val_weight[0] * val_weight[1]
+                   if type(val_weight) is tuple else val_weight, vals_with_weight))
 
 
 def read_lines_from_file(filename):
@@ -48,13 +49,76 @@ def parse_roman(s, sofar=0):
     return parse_roman(s[1:], sofar + chomp)
 
 
-regex_separator = r"^(\W\W?)\1+\W?$"
-regex_numbered_line = r"^(?:#?)(\d+|[mdclxvi]+)(\W+)(.+)"
-regex_tracklength = r"(.+)\s+(?:\(\d{1,2}[:]\d\d\)|\d{1,2}[:]\d\d)\s*$"
+# Handling ID3 tags and MP3 files
+
+uslt_key = 'USLT::eng'
 
 
-# Recognizing and stripping song lyrics from a text file
+def lyrics_getter(inst, key):
+    uslt_frame = inst.get(uslt_key)
+    return uslt_frame.text if uslt_frame else None
 
+
+def lyrics_setter(inst, key, lyrics_arr):
+    lyrics = lyrics_arr[0]
+    uslt_frame = inst.get(uslt_key)
+    if uslt_frame:
+        uslt_frame.text = lyrics
+    else:
+        inst.add(id3.USLT(id3.Encoding.UTF8, lang='eng', desc='', text=lyrics))
+
+
+def lyrics_deleter(inst, key):
+    inst.delall(uslt_key)
+
+
+def lyrics_lister(inst, key):
+    return ['lyrics'] if inst.get(uslt_key) else []
+
+
+easyid3.EasyID3.RegisterKey('lyrics', lyrics_getter, lyrics_setter, lyrics_deleter, lyrics_lister)
+
+
+class SongMP3:
+    @staticmethod
+    def from_path(path):
+        def from_file(filename):
+            maybe_song = []
+            try:
+                maybe_song = [SongMP3(filename)]
+            finally:
+                return maybe_song
+
+        import glob
+        from functools import reduce
+        return list(reduce(lambda acc, val: acc+val, map(lambda f: from_file(f), sorted(glob.glob(path))), []))
+
+    def __init__(self, mp3file):
+        self.path = mp3file
+        self.tags = tags = easyid3.EasyID3(str(mp3file))  # mp3_file.tags
+        self.title = tags['title'][0] if 'title' in tags else Path(mp3file).stem  # TODO get title from filename only?
+        self.album = tags['album'][0] if 'album' in tags else None
+        self.artist = tags['artist'][0] if 'artist' in tags \
+            else tags['albumartist'][0] if 'albumartist' in tags \
+            else None
+        self.year = tags['date'][0] if 'date' in tags else None
+        if 'tracknumber' in tags:
+            m = re.match("(\\d+)(/(\\d+))?", tags['tracknumber'][0])
+            if m:
+                self.tracknumber = int(m.group(1))
+        else:
+            self.tracknumber = None
+
+    def __repr__(self):
+        return f"Song \"{self.title}\" by {self.artist}, #{self.tracknumber} " \
+               f"on the album \"{self.album}\" ({self.year})"
+
+
+def title_of(song):
+    return song.title if type(song) is SongMP3 else str(song)
+
+
+# Finding song lyrics in a text file
 
 class LineType:
     def __init__(self, prev):
@@ -65,7 +129,7 @@ class LineType:
     def of(line, prev=None):
         line = line.strip()
         this = BlankLine(prev) if len(line) == 0 \
-            else TextLine(line, prev) if not re.match(regex_separator, line) \
+            else TextLine(line, prev) if not Separator.looks_like(line) \
             else UnderLine(prev) if type(prev) is TextLine and type(prev.prev) is not TextLine \
             else Separator(prev)
         if prev is not None:
@@ -83,13 +147,15 @@ class LineType:
 
 
 class BlankLine(LineType):
-    def __repr__(self):
-        return ""
+    pass
 
 
 class Separator(LineType):
-    def __repr__(self):
-        return "==="
+    regex = r"^(\W\W?)\1+\W?$"
+
+    @staticmethod
+    def looks_like(line):
+        return re.match(Separator.regex, line) is not None
 
 
 class UnderLine(LineType):
@@ -98,46 +164,41 @@ class UnderLine(LineType):
         if prev is not None:
             prev.has_underline = True
 
-    def __repr__(self):
-        return "___"
-
 
 class TextLine(LineType):
+    regex_numbered_line = r"^(?:#?)(\d+|[mdclxvi]+)(\W+)(.+)"
+    regex_tracklength = r"(.+)\s+(?:\(\d{1,2}[:]\d\d\)|\d{1,2}[:]\d\d)\s*$"
+
     def __init__(self, line, prev):
         super().__init__(prev)
         self.number = self.number_separator = None
         self.line = line
         self.essence = line.strip()
-        number_match = re.match(regex_numbered_line, self.essence)
+        number_match = re.match(TextLine.regex_numbered_line, self.essence)
         if number_match:
             number = number_match.group(1)
-            if re.match(r"\d+", number):
-                (self.number, self.number_separator, self.essence) = \
-                    (int(number), number_match.group(2), number_match.group(3))
+            try:
+                self.number = int(number) if re.match(r"\d+", number) else parse_roman(number)
+            except ValueError:
+                pass
             else:
-                try:
-                    (self.number, self.number_separator, self.essence) = \
-                        (parse_roman(number), number_match.group(2), number_match.group(3))
-                except ValueError:
-                    pass
+                self.number_separator = number_match.group(2)
+                self.essence = number_match.group(3)
 
-        tracklen_match = re.match(regex_tracklength, self.essence)
-        (self.has_tracklength, self.essence) = \
-            (True, tracklen_match.group(1)) if tracklen_match \
-                else (False, self.essence)
+        tracklen_match = re.match(TextLine.regex_tracklength, self.essence)
+        self.has_tracklength = tracklen_match is not None
+        self.essence = tracklen_match.group(1) if self.has_tracklength else self.essence
+
         self.is_all_uppercase = len(re.sub(r"[^a-z]", "", self.essence)) == 0
 
     def is_numbered(self):
         return self.number is not None
 
-    def __repr__(self):
-        return f"{self.line[:7]}..."
-
     def title_score(self):
-        return self.is_numbered() * 2 + truths(self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
+        return weighed_values((self.is_numbered(), 2), self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
 
 
-def monotonic(ints):
+def is_monotonic(ints):
     for idx in range(1, len(ints)):
         if ints[idx] < ints[idx - 1]:
             return False
@@ -165,10 +226,9 @@ class Blob:
         elif (type(line) is UnderLine) or (type(line) is self.type
                                            and self.blanks == 0 and not self.header().is_underlined()):
             self.lines.append(line)
-            if line.is_numbered() and monotonic([l.number for l in self.lines if l.is_numbered()]):
+            if line.is_numbered() and is_monotonic([l.number for l in self.lines if l.is_numbered()]):
                 self.is_tracklist = True
             merged = True
-
         return merged
 
     def preceded_by_separator(self):
@@ -176,7 +236,7 @@ class Blob:
                (self.prev.type is BlankLine and self.prev.preceded_by_separator())
 
     def count_score(self):
-        self.song_begins_score = self.header().title_score() + truths(self.preceded_by_separator(), len(self.lines) == 1)
+        self.song_begins_score = self.header().title_score() + weighed_values(self.preceded_by_separator(), len(self.lines) == 1)
 
     def to_lines(self):
         return [l.line for l in self.lines] + [""] * self.blanks
@@ -271,7 +331,7 @@ def find_song_header(file_lines, song_title):
         return None
 
 
-def strip(arr):
+def trim_empty_lines(arr):
     first, last = 0, len(arr) - 1
     while first <= last and arr[first] == "":
         first += 1
@@ -280,7 +340,8 @@ def strip(arr):
     return arr[first:last + 1]
 
 
-def find_lyrics_in_file(lyrics_file, song_title):
+def get_lyrics_from_file(lyrics_file, song):
+    song_title = title_of(song)
     file_lines = read_lines_from_file(lyrics_file)
     if len(file_lines) == 0:
         err(f"> File {lyrics_file} is empty.")
@@ -302,75 +363,8 @@ def find_lyrics_in_file(lyrics_file, song_title):
         if next_part.type in [TextLine, BlankLine]:
             lyrics += next_part.to_lines()
         cur_part = cur_part.next
-    lyrics = strip(lyrics)
-    return lyrics if len(lyrics) > 0 else None
-
-
-# ======================================
-# stuff for reading from and saving to mp3 tags...
-
-
-uslt_key = 'USLT::eng'
-
-
-def lyrics_getter(inst, key):
-    uslt_frame = inst.get(uslt_key)
-    return uslt_frame.text if uslt_frame else None
-
-
-def lyrics_setter(inst, key, lyrics_arr):
-    lyrics = lyrics_arr[0]
-    uslt_frame = inst.get(uslt_key)
-    if uslt_frame:
-        uslt_frame.text = lyrics
-    else:
-        inst.add(id3.USLT(id3.Encoding.UTF8, lang='eng', desc='', text=lyrics))
-
-
-def lyrics_deleter(inst, key):
-    inst.delall(uslt_key)
-
-
-def lyrics_lister(inst, key):
-    return ['lyrics'] if inst.get(uslt_key) else []
-
-
-easyid3.EasyID3.RegisterKey('lyrics', lyrics_getter, lyrics_setter, lyrics_deleter, lyrics_lister)
-
-
-class SongMP3:
-    @staticmethod
-    def from_path(path):
-        import glob
-        return list(filter(lambda s: s is not None, map(lambda f: SongMP3.from_file(f), sorted(glob.glob(path)))))
-
-    @staticmethod
-    def from_file(filename):
-        song = None
-        try:
-            song = SongMP3(filename)
-        finally:
-            return song
-
-    def __init__(self, mp3file):
-        self.path = mp3file
-        self.tags = tags = easyid3.EasyID3(str(mp3file))  # mp3_file.tags
-        self.title = tags['title'][0]
-        self.album = tags['album'][0] if 'album' in tags else None
-        self.artist = tags['artist'][0] if 'artist' in tags \
-            else tags['albumartist'][0] if 'albumartist' in tags \
-            else None
-        self.year = tags['date'][0] if 'date' in tags else None
-        if 'tracknumber' in tags:
-            m = re.match("(\\d+)(/(\\d+))?", tags['tracknumber'][0])
-            if m:
-                self.tracknumber = int(m.group(1))
-        else:
-            self.tracknumber = None
-
-    def __repr__(self):
-        return f"Song \"{self.title}\" by {self.artist}, #{self.tracknumber} " \
-               f"on the album \"{self.album}\" ({self.year})"
+    lyrics = trim_empty_lines(lyrics)
+    return "\r\n".join(lyrics) if len(lyrics) > 0 else None
 
 
 # Parsing arguments
@@ -382,17 +376,16 @@ parser = argparse.ArgumentParser(prog="LYRICS",
 
 # SONGS - this can be a (possibly wildcard) path if you want one (or more) mp3 files.
 # If path doesn't resolve to any mp3 files, this is treated as a explicitly given song title.
-parser.add_argument('--for', '-f', '-4', required=True, dest='songs',
+parser.add_argument('songs',
                     help="Song or songs to look for lyrics to. By default resolves to mp3 file "
                          "(or multiple files if wildcard path is given, to resolve one file at a time).\n"
                          "If it doesn't point to any mp3 file, it is treated as explicitly given song title.")
 
 # SOURCE - source of lyrics: if not given, defaults to, in that order: mp3 tag, local txt file.
 # If given, is resolved to a txt file to look for lyrics in.
-parser.add_argument('--source', '--from', '-s',
-                    help="Song or songs to look for lyrics to. By default resolves to tags in mp3 file "
-                         "(or multiple files if wildcard path is given, to resolve one file at a time).\n"
-                         "If args is not given and lyrics aren't in mp3 file, looks for a lyrics text file.")
+parser.add_argument('--from', '-f',  dest='source', nargs='?', default='TAG', const='DEFAULT FILE',
+                    help="Name of the lyrics text file to look in. If not given, looks for default file.\n"
+                         "If argument is omitted entirely, looks first in mp3 tag (if available) and then default file.")
 
 # TARGET - what to do with obtained lyrics? Save to txt file? Append to file? Print out to stdout?
 # By default prints out.
@@ -401,7 +394,8 @@ parser.add_argument('--to', '-t', '-2', dest='target',
                          "If given, saves to given txt file. If the file exists, the lyrics will be appended.")
 # OUT - flag to print lyrics to console
 parser.add_argument('--out', '-o', action='store_true',
-                    help="Flag to print obtained lyrics out to console.")
+                    help="Flag to print obtained lyrics out to console. Need to be explicitly given if any other "
+                         "target argument (--out or --save) is used and you still want to print out the lyrics.")
 # SAVE - flag to save lyrics to mp3 file(s) tags
 parser.add_argument('--save', action='store_true',
                     help="Flag to save obtained lyrics to an ID3 tag in respective mp3 file(s)'.\n"
@@ -415,7 +409,7 @@ if not songs:
     songs = [args.songs]
 
 
-def lyrics_files(song):
+def find_default_files(song):
     directory = Path(".")
     txt_file_templates = [r'lyrics']
     if type(song) is SongMP3:
@@ -434,24 +428,35 @@ def lyrics_files(song):
         key=lambda triple: triple[2], reverse=True))
 
 
-def find_song_lyrics(title, source):
-    if source is None:  # from tags or find txt file
-        if type(song) is SongMP3 and song.tags['lyrics']:
-            return song.tags['lyrics']
-        else:
-            for filename in lyrics_files(song):
-                lyrics = find_lyrics_in_file(filename, title)
-                if lyrics is not None:
-                    return "\r\n".join(lyrics)
+def get_lyrics_from_default_file(song):
+    for filename in find_default_files(song):
+        lyrics = get_lyrics_from_file(filename, title_of(song))
+        if lyrics is not None:
+            return lyrics, filename
+
+
+def get_lyrics_from_tag(song, failover=get_lyrics_from_default_file):
+    if type(song) is SongMP3 and song.tags['lyrics']:
+        return song.tags['lyrics'], 'TAG'
+    elif failover is not None:
+        return failover(song)
+
+
+def find_song_lyrics(song, source):
+    if source == 'TAG':  # from tags or find txt file
+        return get_lyrics_from_tag(song)
+    elif source == 'DEFAULT FILE':
+        return get_lyrics_from_default_file(song)
     else:
-        return find_lyrics_in_file(source, title)
+        return get_lyrics_from_file(source, title_of(song)), source
 
 
 song_lyrics = {}
 for song in songs:
-    lyrics = find_song_lyrics(song.title if type(song) is SongMP3 else song, args.source)
+    lyrics = find_song_lyrics(song, args.source)
     if lyrics is not None:
-        song_lyrics[song] = lyrics
+        log(f"Found lyrics for {title_of(song)} in {lyrics[1]}")
+        song_lyrics[song] = lyrics[0]
 
 for song in songs:
     if song in song_lyrics:
