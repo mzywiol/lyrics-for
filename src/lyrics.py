@@ -17,12 +17,13 @@ def err(msg):
 
 
 def log(msg):
-    print(f">>> {msg}")
+    if args.verbose:
+        print(f">>> {msg}")
 
 
 def weighed_values(*vals_with_weight):
     return sum(map(lambda val_weight: val_weight[0] * val_weight[1]
-                   if type(val_weight) is tuple else val_weight, vals_with_weight))
+    if type(val_weight) is tuple else val_weight, vals_with_weight))
 
 
 def read_lines_from_file(filename):
@@ -91,7 +92,9 @@ class SongMP3:
 
         import glob
         from functools import reduce
-        return list(reduce(lambda acc, val: acc+val, map(lambda f: from_file(f), sorted(glob.glob(path))), []))
+        song_file_candidates = sorted(glob.glob(path))
+        return None if len(song_file_candidates) == 0 \
+            else list(reduce(lambda acc, val: acc + val, map(lambda f: from_file(f), song_file_candidates), []))
 
     def __init__(self, mp3file):
         self.path = mp3file
@@ -195,7 +198,8 @@ class TextLine(LineType):
         return self.number is not None
 
     def title_score(self):
-        return weighed_values((self.is_numbered(), 2), self.has_tracklength, self.is_underlined(), self.is_all_uppercase)
+        return weighed_values((self.is_numbered(), 2), self.has_tracklength, self.is_underlined(),
+                              self.is_all_uppercase)
 
 
 def is_monotonic(ints):
@@ -236,7 +240,8 @@ class Blob:
                (self.prev.type is BlankLine and self.prev.preceded_by_separator())
 
     def count_score(self):
-        self.song_begins_score = self.header().title_score() + weighed_values(self.preceded_by_separator(), len(self.lines) == 1)
+        self.song_begins_score = self.header().title_score() + weighed_values(self.preceded_by_separator(),
+                                                                              len(self.lines) == 1)
 
     def to_lines(self):
         return [l.line for l in self.lines] + [""] * self.blanks
@@ -340,6 +345,7 @@ def trim_empty_lines(arr):
     return arr[first:last + 1]
 
 
+# TODO: can other file formats (MS Office doc for example) be looked up too?
 def get_lyrics_from_file(lyrics_file, song):
     song_title = title_of(song)
     file_lines = read_lines_from_file(lyrics_file)
@@ -364,7 +370,87 @@ def get_lyrics_from_file(lyrics_file, song):
             lyrics += next_part.to_lines()
         cur_part = cur_part.next
     lyrics = trim_empty_lines(lyrics)
-    return "\r\n".join(lyrics) if len(lyrics) > 0 else None
+    if len(lyrics) > 0:
+        log(f"Found lyrics for {song_title} in {lyrics_file}")
+        return "\r\n".join(lyrics)
+    else:
+        err(f"Lyrics for {song_title} not found in {lyrics_file}")
+        return None
+
+
+def get_lyrics_from_particular_file(lyrics_file):
+    return lambda song: get_lyrics_from_file(lyrics_file, song)
+
+
+# Finding a default lyrics file for the song
+
+
+def get_lyrics_from_default_file(song):
+    def default_lyrics_files(song): # TODO make it into generator? use yield keyword?
+        from functools import reduce
+        directory = Path(".")
+        txt_file_templates = {r'lyrics': []}
+        if type(song) is SongMP3:
+            directory = Path(song.path).parent
+            if song.album is not None:
+                txt_file_templates[song.album.lower()] = []
+                if song.artist is not None:
+                    txt_file_templates[song.artist.lower() + " - " + song.album.lower()] = []
+        simi_threshold = 0.6
+        txt_files = [f for f in directory.iterdir() if f.suffix == ".txt"]
+        if len(txt_files) == 1:
+            return txt_files
+        for template in txt_file_templates:
+            matching = list(dict(sorted(filter(lambda kv: kv[1] > simi_threshold,
+                                        [(file, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
+                                         for file in txt_files]), key=lambda kv: kv[1])).keys())
+            txt_file_templates[template] = matching
+            for m in matching:
+                txt_files.remove(m)
+        return reduce(lambda a, b: a+txt_file_templates[b], txt_file_templates, [])
+
+        # return list({file: template
+        #              for template in txt_file_templates
+        #              for file in txt_files
+        #              if difflib.SequenceMatcher(None, file.stem.lower(), template).ratio() > simi_threshold
+        #              }.keys())
+        # return (triple[0] for triple in sorted(
+        #     filter(lambda triple: triple[2] > simi_threshold,
+        #            [(file, template, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
+        #             for file in txt_files
+        #             for template in txt_file_templates]),
+        #     key=lambda triple: triple[2], reverse=True))
+
+    for filename in default_lyrics_files(song):
+        found_lyrics = get_lyrics_from_file(filename, title_of(song))
+        if found_lyrics is not None:
+            return found_lyrics
+
+
+# Finding song in MP3 tags
+
+
+# TODO can ID3 tags be obtained from other audio file formats?
+def get_lyrics_from_tag(song, failover=get_lyrics_from_default_file):
+    if type(song) is SongMP3 and song.tags['lyrics']:
+        log(f"Found lyrics for {title_of(song)} in mp3 tag")
+        return song.tags['lyrics']
+    else:
+        err(f"Lyrics for {title_of(song)} not found in mp3 tag")
+        return failover(song) if failover is not None else None
+
+
+# Processing found lyrics
+def print_lyrics(lyrics, file=sys.stdout):
+    print(lyrics, file=file)
+
+
+def save_lyrics_to_tag(lyrics, song):
+    if type(song) is not SongMP3:
+        err(f"Cannot save lyrics to tag, as {song} is not a mp3 file.")
+        return
+    song.tags['lyrics'] = lyrics
+    song.tags.save()
 
 
 # Parsing arguments
@@ -376,106 +462,68 @@ parser = argparse.ArgumentParser(prog="LYRICS",
 
 # SONGS - this can be a (possibly wildcard) path if you want one (or more) mp3 files.
 # If path doesn't resolve to any mp3 files, this is treated as a explicitly given song title.
-parser.add_argument('songs',
+parser.add_argument('songs', nargs='+',
                     help="Song or songs to look for lyrics to. By default resolves to mp3 file "
                          "(or multiple files if wildcard path is given, to resolve one file at a time).\n"
                          "If it doesn't point to any mp3 file, it is treated as explicitly given song title.")
 
 # SOURCE - source of lyrics: if not given, defaults to, in that order: mp3 tag, local txt file.
 # If given, is resolved to a txt file to look for lyrics in.
-parser.add_argument('--from', '-f',  dest='source', nargs='?', default='TAG', const='DEFAULT FILE',
+parser.add_argument('--from', '--file', '-f', dest='get_lyrics_for', nargs='?',
+                    default=get_lyrics_from_tag,
+                    const=get_lyrics_from_default_file,
+                    type=get_lyrics_from_particular_file,
                     help="Name of the lyrics text file to look in. If not given, looks for default file.\n"
                          "If argument is omitted entirely, looks first in mp3 tag (if available) and then default file.")
 
 # TARGET - what to do with obtained lyrics? Save to txt file? Append to file? Print out to stdout?
 # By default prints out.
-parser.add_argument('--to', '-t', '-2', dest='target',
-                    help="Target for the obtained lyrics. Defaults to print out to console.\n"
-                         "If given, saves to given txt file. If the file exists, the lyrics will be appended.")
-# OUT - flag to print lyrics to console
-parser.add_argument('--out', '-o', action='store_true',
-                    help="Flag to print obtained lyrics out to console. Need to be explicitly given if any other "
-                         "target argument (--out or --save) is used and you still want to print out the lyrics.")
-# SAVE - flag to save lyrics to mp3 file(s) tags
+parser.add_argument('--out', '-o', dest='out_files', nargs='?', action='append', default=[], const=sys.stdout,
+                    type=argparse.FileType('a'),
+                    help="Target file for the obtained lyrics to be appended to. If not given, print out to console.")
 parser.add_argument('--save', action='store_true',
                     help="Flag to save obtained lyrics to an ID3 tag in respective mp3 file(s)'.\n"
-                         "If given, lyrics will not be printed out unless --to option is given specifically")
+                         "If given, lyrics will not be printed out unless --out option is given specifically")
+
+parser.add_argument('--verbose', '-v', action='store_true',
+                    help='Print log messages to console')
+parser.add_argument('--quiet', '-q', action='store_true',
+                    help='Don\'t print error messages to error console')
 
 args = parser.parse_args()
+if len(args.out_files) == 0 and not args.save:
+    args.out_files = [sys.stdout]
 
-# existing files matching the given path
-songs = SongMP3.from_path(args.songs)
-if not songs:
-    songs = [args.songs]
+# Process song list: make existing files into MP3 files and leave given titles intact
+songs = []
+for entry in args.songs:
+    entry_songs = SongMP3.from_path(entry)
+    songs += [entry] if entry_songs is None else entry_songs
 
-
-def find_default_files(song):
-    directory = Path(".")
-    txt_file_templates = [r'lyrics']
-    if type(song) is SongMP3:
-        directory = Path(song.path).parent
-        if song.album is not None:
-            txt_file_templates.append(song.album.lower())
-            if song.artist is not None:
-                txt_file_templates.append(song.artist.lower() + " - " + song.album.lower())
-    simi_threshold = 0.6
-    txt_files = [f for f in directory.iterdir() if f.suffix == ".txt"]
-    return (triple[0] for triple in sorted(
-        filter(lambda triple: triple[2] > simi_threshold,
-               [(file, template, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
-                for file in txt_files
-                for template in txt_file_templates]),
-        key=lambda triple: triple[2], reverse=True))
-
-
-def get_lyrics_from_default_file(song):
-    for filename in find_default_files(song):
-        lyrics = get_lyrics_from_file(filename, title_of(song))
-        if lyrics is not None:
-            return lyrics, filename
-
-
-def get_lyrics_from_tag(song, failover=get_lyrics_from_default_file):
-    if type(song) is SongMP3 and song.tags['lyrics']:
-        return song.tags['lyrics'], 'TAG'
-    elif failover is not None:
-        return failover(song)
-
-
-def find_song_lyrics(song, source):
-    if source == 'TAG':  # from tags or find txt file
-        return get_lyrics_from_tag(song)
-    elif source == 'DEFAULT FILE':
-        return get_lyrics_from_default_file(song)
-    else:
-        return get_lyrics_from_file(source, title_of(song)), source
-
-
+# Find lyrics for every song
 song_lyrics = {}
 for song in songs:
-    lyrics = find_song_lyrics(song, args.source)
+    lyrics = args.get_lyrics_for(song)
     if lyrics is not None:
-        log(f"Found lyrics for {title_of(song)} in {lyrics[1]}")
-        song_lyrics[song] = lyrics[0]
+        song_lyrics[song] = lyrics
 
-for song in songs:
-    if song in song_lyrics:
-        print(song_lyrics[song])
+# Process lyrics
+for song in song_lyrics:
+    for file in args.out_files:
+        print_lyrics(song_lyrics[song], file=file)
+    if args.save:
+        save_lyrics_to_tag(song_lyrics[song], song)
 
-
-
-### params:
-# $ lyrics.py
-# $ -4 --for [song mp3 file(s) or song title(s); REQUIRED]
-# $ -s --source [txt file if 'txt' or specified and exists, tag in mp3 file if 'tag', url to a lyrics service if given, DEFAULT mp3 tag or automatically found lyrics file]
-# $ --to [txt file if given, mp3 tag if 'tag', DEFAULT write to screen]
-# $ --write [shorthand for --to tag]
+# Close open files
+for file in args.out_files:
+    if file is not sys.stdout:
+        file.close()
 
 # TODO:
 # parsing args
 # reading tags from mp3 file (see lyricsfor.py) -> done
-# reading lyrics from txt file (see lyricsfor.py)
-# finding default txt file (see lyricsfor.py)
+# reading lyrics from txt file (see lyricsfor.py) -> done
+# finding default txt file (see lyricsfor.py) -> done
 # saving lyrics to txt file
 # saving lyrics to mp3 tag
 # querying internet lyrics databases:
