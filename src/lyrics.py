@@ -22,8 +22,8 @@ def log(msg):
 
 
 def weighed_values(*vals_with_weight):
-    return sum(map(lambda val_weight: val_weight[0] * val_weight[1]
-    if type(val_weight) is tuple else val_weight, vals_with_weight))
+    return sum(map(lambda val_weight: val_weight[0] * val_weight[1] if type(val_weight) is tuple
+                   else val_weight, vals_with_weight))
 
 
 def read_lines_from_file(filename):
@@ -59,12 +59,12 @@ def parse_roman(s, sofar=0):
 uslt_key = 'USLT::eng'
 
 
-def lyrics_getter(inst, key):
+def lyrics_getter(inst, _):
     uslt_frame = inst.get(uslt_key)
     return uslt_frame.text if uslt_frame else None
 
 
-def lyrics_setter(inst, key, lyrics_arr):
+def lyrics_setter(inst, _, lyrics_arr):
     lyrics = lyrics_arr[0]
     uslt_frame = inst.get(uslt_key)
     if uslt_frame:
@@ -73,11 +73,11 @@ def lyrics_setter(inst, key, lyrics_arr):
         inst.add(id3.USLT(id3.Encoding.UTF8, lang='eng', desc='', text=lyrics))
 
 
-def lyrics_deleter(inst, key):
+def lyrics_deleter(inst, _):
     inst.delall(uslt_key)
 
 
-def lyrics_lister(inst, key):
+def lyrics_lister(inst, _):
     return ['lyrics'] if inst.get(uslt_key) else []
 
 
@@ -390,7 +390,7 @@ def get_lyrics_from_particular_file(lyrics_file):
 
 
 def get_lyrics_from_default_file(song):
-    def default_lyrics_files(song): # TODO make it into generator? use yield keyword?
+    def default_lyrics_files():  # TODO make it into generator? use yield keyword?
         from functools import reduce
         directory = Path(".")
         txt_file_templates = {r'lyrics': []}
@@ -406,26 +406,15 @@ def get_lyrics_from_default_file(song):
             return txt_files
         for template in txt_file_templates:
             matching = list(dict(sorted(filter(lambda kv: kv[1] > simi_threshold,
-                                        [(file, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
-                                         for file in txt_files]), key=lambda kv: kv[1])).keys())
+                                               [(file,
+                                                 difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
+                                                for file in txt_files]), key=lambda kv: kv[1])).keys())
             txt_file_templates[template] = matching
             for m in matching:
                 txt_files.remove(m)
-        return reduce(lambda a, b: a+txt_file_templates[b], txt_file_templates, [])
+        return reduce(lambda a, b: a + txt_file_templates[b], txt_file_templates, [])
 
-        # return list({file: template
-        #              for template in txt_file_templates
-        #              for file in txt_files
-        #              if difflib.SequenceMatcher(None, file.stem.lower(), template).ratio() > simi_threshold
-        #              }.keys())
-        # return (triple[0] for triple in sorted(
-        #     filter(lambda triple: triple[2] > simi_threshold,
-        #            [(file, template, difflib.SequenceMatcher(None, file.stem.lower(), template).ratio())
-        #             for file in txt_files
-        #             for template in txt_file_templates]),
-        #     key=lambda triple: triple[2], reverse=True))
-
-    for filename in default_lyrics_files(song):
+    for filename in default_lyrics_files():
         found_lyrics = get_lyrics_from_file(filename, title_of(song))
         if found_lyrics is not None:
             return found_lyrics
@@ -543,33 +532,32 @@ if len(args.out_files) == 0 and not args.save:
     args.out_files = [sys.stdout]
 
 # Process song list: make existing files into MP3 files and leave given titles intact
-songs = []
+song_list = []
 for entry in args.songs:
     entry_songs = SongMP3.from_path(entry)
-    songs += [entry] if entry_songs is None else entry_songs
+    song_list += [entry] if entry_songs is None else entry_songs
 
 # Find lyrics for every song
-song_lyrics = {}
-for song in songs:
-    lyrics = args.get_lyrics_for(song)
-    song_lyrics[song] = args.not_found if lyrics is None else lyrics
-
+songs_with_lyrics = {}
+for the_song in song_list:
+    the_lyrics = args.get_lyrics_for(the_song)
+    songs_with_lyrics[the_song] = args.not_found if the_lyrics is None else the_lyrics
 
 # Process lyrics
-if args.tracklist and len(song_lyrics) > 0:
-    for file in args.out_files:
-        print_tracklist(song_lyrics, file=file)
+if args.tracklist and len(songs_with_lyrics) > 0:
+    for out_file in args.out_files:
+        print_tracklist(songs_with_lyrics, file=out_file)
 
-for song in song_lyrics:
-    for file in args.out_files:
-        print_lyrics(song, song_lyrics[song], file=file)
+for the_song in songs_with_lyrics:
+    for out_file in args.out_files:
+        print_lyrics(the_song, songs_with_lyrics[the_song], file=out_file)
     if args.save:
-        save_lyrics_to_tag(song_lyrics[song], song)
+        save_lyrics_to_tag(songs_with_lyrics[the_song], the_song)
 
 # Close open files
-for file in args.out_files:
-    if file is not sys.stdout:
-        file.close()
+for out_file in args.out_files:
+    if out_file is not sys.stdout:
+        out_file.close()
 
 # TODO:
 # parsing args
