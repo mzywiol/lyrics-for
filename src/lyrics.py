@@ -39,6 +39,10 @@ def read_lines_from_file(filename):
     return filelines
 
 
+def looks_like_song_filename(s):
+    return Path(s).suffix == '.mp3'
+
+
 def parse_roman(s, sofar=0):
     if len(s) == 0:
         return sofar
@@ -441,14 +445,44 @@ def get_lyrics_from_tag(song, failover=get_lyrics_from_default_file):
 
 
 # Processing found lyrics
-def print_lyrics(lyrics, file=sys.stdout):
+
+def song_header(song):
+    trackno = f"{song.tracknumber}. " if song.tracknumber else ""
+    title = f"{song.title}"
+    return f"{trackno}{title}"
+
+
+def print_separator(file):
+    horizontal_line = "=" * 40
+    print(f"\n{horizontal_line}\n", file=file)
+
+
+def print_tracklist(songs, file=sys.stdout):
+    for song in songs:
+        print(song_header(song), file=file)
+    print_separator(file)
+
+
+def print_song_header(song, file):
+    print(f"{song_header(song)}\n\n", file=file)
+
+
+def print_lyrics(song, lyrics, file=sys.stdout):
+    if args.song_header:
+        print_song_header(song, file=file)
     print(lyrics, file=file)
+    if args.song_separator:
+        print_separator(file=file)
 
 
 def save_lyrics_to_tag(lyrics, song):
+    if lyrics is None:
+        return
+
     if type(song) is not SongMP3:
         err(f"Cannot save lyrics to tag, as {song} is not a mp3 file.")
         return
+
     song.tags['lyrics'] = lyrics
     song.tags.save()
 
@@ -485,6 +519,20 @@ parser.add_argument('--save', action='store_true',
                     help="Flag to save obtained lyrics to an ID3 tag in respective mp3 file(s)'.\n"
                          "If given, lyrics will not be printed out unless --out option is given specifically")
 
+# PRINT FORMAT MODIFIERS
+parser.add_argument('--song-header', action='store_true',  # todo specify header format from command line, with default
+                    help="Precede song lyrics with its title when printing to file or console.")
+parser.add_argument('--song-separator', action='store_true',
+                    help="Follow song lyrics with separator when printing to file or console.")
+parser.add_argument('--tracklist', action='store_true',
+                    help="First print the list of all songs when printing to file or console.")
+parser.add_argument('--album-info', action='store_true',
+                    help="Precede tracklist for separate album with that album info when printing to file or console.")
+parser.add_argument('--not-found', nargs="?", default="No lyrics found.", const="",
+                    help="What to print for when the lyrics were not found. Defaults to nothing.\n"
+                         "If not specified, will skip processing the song entirely.")
+
+# GENERAL OPTIONS
 parser.add_argument('--verbose', '-v', action='store_true',
                     help='Print log messages to console')
 parser.add_argument('--quiet', '-q', action='store_true',
@@ -504,13 +552,17 @@ for entry in args.songs:
 song_lyrics = {}
 for song in songs:
     lyrics = args.get_lyrics_for(song)
-    if lyrics is not None:
-        song_lyrics[song] = lyrics
+    song_lyrics[song] = args.not_found if lyrics is None else lyrics
+
 
 # Process lyrics
+if args.tracklist and len(song_lyrics) > 0:
+    for file in args.out_files:
+        print_tracklist(song_lyrics, file=file)
+
 for song in song_lyrics:
     for file in args.out_files:
-        print_lyrics(song_lyrics[song], file=file)
+        print_lyrics(song, song_lyrics[song], file=file)
     if args.save:
         save_lyrics_to_tag(song_lyrics[song], song)
 
@@ -524,7 +576,7 @@ for file in args.out_files:
 # reading tags from mp3 file (see lyricsfor.py) -> done
 # reading lyrics from txt file (see lyricsfor.py) -> done
 # finding default txt file (see lyricsfor.py) -> done
-# saving lyrics to txt file
-# saving lyrics to mp3 tag
+# saving lyrics to txt file -> done
+# saving lyrics to mp3 tag -> done
 # querying internet lyrics databases:
 #    ???
