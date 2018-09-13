@@ -43,15 +43,18 @@ def looks_like_song_filename(s):
     return Path(s).suffix == '.mp3'
 
 
-def parse_roman(s, sofar=0):
-    if len(s) == 0:
-        return sofar
+class Roman:
     double = {"cm": -100, "cd": -100, "xc": -10, "xl": -10, "ix": -1, "iv": -1}
     single = {"m": 1000, "d": 500, "c": 100, "l": 50, "x": 10, "v": 5, "i": 1}
-    chomp = double.get(s[0:2].lower(), single.get(s[0].lower()))
-    if chomp is None:
-        raise ValueError("Could not parse roman numeral %s" % s)
-    return parse_roman(s[1:], sofar + chomp)
+
+    @staticmethod
+    def parse(s, sofar=0):
+        if len(s) == 0:
+            return sofar
+        chomp = Roman.double.get(s[0:2].lower(), Roman.single.get(s[0].lower()))
+        if chomp is None:
+            raise ValueError("Could not parse roman numeral %s" % s)
+        return Roman.parse(s[1:], sofar + chomp)
 
 
 # Handling ID3 tags and MP3 files
@@ -185,7 +188,7 @@ class TextLine(LineType):
         if number_match:
             number = number_match.group(1)
             try:
-                self.number = int(number) if re.match(r"\d+", number) else parse_roman(number)
+                self.number = int(number) if re.match(r"\d+", number) else Roman.parse(number)
             except ValueError:
                 pass
             else:
